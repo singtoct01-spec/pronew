@@ -112,6 +112,19 @@ export interface ProductMoldMapping {
   moldCodes: string[];
 }
 
+export interface DowntimeLog {
+  id: string;
+  machineId: string;
+  date: string; // ISO date
+  startTime?: string; // HH:mm
+  endTime?: string; // HH:mm
+  durationMinutes: number;
+  category: 'Breakdown' | 'Setup' | 'Quality' | 'Material' | 'Other';
+  reason: string;
+  reporter?: string;
+  impactOnPlan?: string;
+}
+
 export const sortMachines = (machineIds: string[]): string[] => {
   const PREFIX_ORDER = ['IP', 'IO', 'AB', 'IB', 'B'];
 

@@ -22,6 +22,7 @@ interface SmartAssistantProps {
   onCreateJob: (job: ProductionJob) => void;
   onBatchUpsert?: (jobs: ProductionJob[]) => void;
   onGenerateForm?: (html: string, title: string) => void;
+  onLogDowntime?: (data: any) => void;
   messages: AiMessage[];
   setMessages: React.Dispatch<React.SetStateAction<AiMessage[]>>;
 }
@@ -47,6 +48,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   onCreateJob,
   onBatchUpsert,
   onGenerateForm,
+  onLogDowntime,
   messages,
   setMessages
 }) => {
@@ -267,6 +269,22 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         
         - If the user asks you to create a form, document, or tag (especially if they upload an image of a template and ask you to use it), you can generate a custom HTML template for it. Use Tailwind CSS classes for styling. Return a JSON action with \`type: 'GENERATE_FORM'\`, \`html: '<div class=\"...\">...</div>'\`, and \`title: 'Form Title'\`. The HTML should be a complete, printable document layout. You can use data from the current jobs if the user specifies.
         - If the user asks to use an existing form template, you can refer to the \`savedFormTemplates\` in the context. You can generate a new form by taking the \`html\` of the saved template and modifying it to insert the requested data (e.g., job details, inventory data). Return a JSON action with \`type: 'GENERATE_FORM'\`, the modified \`html\`, and a new \`title\`.
+        
+        - If the user reports a machine breakdown, setup time, or any downtime (e.g., from a LINE chat message), extract the details and return a JSON action with \`type: 'LOG_DOWNTIME'\`.
+        \`\`\`json
+        {
+          "type": "LOG_DOWNTIME",
+          "data": {
+            "machineId": "AB1",
+            "date": "2026-03-01T00:00:00Z",
+            "durationMinutes": 45,
+            "category": "Breakdown",
+            "reason": "มอเตอร์ไหม้",
+            "reporter": "ช่างเอ"
+          }
+        }
+        \`\`\`
+        (Category must be one of: 'Breakdown', 'Setup', 'Quality', 'Material', 'Other')
         \`\`\`json
         {
           "type": "GENERATE_FORM",
@@ -476,6 +494,13 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         responseText = `✅ สร้างเอกสาร "${proposal.title || 'เอกสาร'}" เรียบร้อยแล้ว ระบบกำลังเปิดหน้าต่างเอกสาร...`;
       } else {
         responseText = `❌ ไม่สามารถสร้างเอกสารได้ (ระบบไม่รองรับ หรือ ข้อมูล HTML ไม่สมบูรณ์)`;
+      }
+    } else if (type === 'LOG_DOWNTIME') {
+      if (onLogDowntime && proposal.data) {
+        onLogDowntime(proposal.data);
+        responseText = `✅ บันทึกข้อมูลเครื่องจักรขัดข้อง (${proposal.data.machineId} - ${proposal.data.reason}) เรียบร้อยแล้ว`;
+      } else {
+        responseText = `❌ ไม่สามารถบันทึกข้อมูลเครื่องจักรขัดข้องได้`;
       }
     } else {
       responseText = `❌ รูปแบบคำสั่งไม่ถูกต้อง (Unknown Action Type: ${proposal.type || 'None'})`;

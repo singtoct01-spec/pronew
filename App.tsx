@@ -21,6 +21,7 @@ import { KnowledgeBase } from './components/KnowledgeBase';
 import { ProductionAnalysis } from './components/ProductionAnalysis';
 import { CustomFormView } from './components/CustomFormView';
 import { FormTemplatesView } from './components/FormTemplatesView';
+import { DowntimeLogsView } from './components/DowntimeLogsView';
 import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate } from './types';
 import { Menu, Sparkles } from 'lucide-react';
 
@@ -71,10 +72,22 @@ const App: React.FC = () => {
       console.error("Error fetching forms from Firebase:", error);
     });
 
+    const unsubscribeDowntimeLogs = onSnapshot(collection(db, 'downtimeLogs'), (snapshot) => {
+      const downtimeData: DowntimeLog[] = [];
+      snapshot.forEach((doc) => {
+        downtimeData.push(doc.data() as DowntimeLog);
+      });
+      downtimeData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setDowntimeLogs(downtimeData);
+    }, (error) => {
+      console.error("Error fetching downtime logs from Firebase:", error);
+    });
+
     return () => {
       unsubscribeJobs();
       unsubscribeLogs();
       unsubscribeForms();
+      unsubscribeDowntimeLogs();
     };
   }, []);
   
@@ -87,6 +100,7 @@ const App: React.FC = () => {
   // New: Logs & AI History State
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
+  const [downtimeLogs, setDowntimeLogs] = useState<DowntimeLog[]>([]);
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([
     { 
       role: 'model', 
@@ -201,6 +215,25 @@ const App: React.FC = () => {
     setIsAssistantOpen(false); // Close assistant to see the form
   };
 
+  const handleLogDowntime = async (data: any) => {
+    try {
+      const newLog: DowntimeLog = {
+        id: `dt-${Date.now()}`,
+        machineId: data.machineId || 'Unknown',
+        date: data.date || new Date().toISOString(),
+        durationMinutes: data.durationMinutes || 0,
+        category: data.category || 'Other',
+        reason: data.reason || 'ไม่ระบุสาเหตุ',
+        reporter: data.reporter || 'AI Assistant',
+        ...data
+      };
+      await setDoc(doc(db, 'downtimeLogs', newLog.id), newLog);
+      addLog('CREATE', `บันทึกเครื่องจักรขัดข้อง: ${newLog.machineId} (${newLog.reason})`, newLog.id);
+    } catch (error) {
+      console.error("Error saving downtime log:", error);
+    }
+  };
+
   const handleSaveFormTemplate = async (html: string, title: string) => {
     try {
       const newForm: FormTemplate = {
@@ -305,6 +338,8 @@ const App: React.FC = () => {
         return <KnowledgeBase />;
       case 'history':
         return <HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />;
+      case 'downtime-logs':
+        return <DowntimeLogsView logs={downtimeLogs} />;
       case 'form-templates':
         return <FormTemplatesView 
           forms={formTemplates} 
@@ -402,6 +437,7 @@ const App: React.FC = () => {
         onCreateJob={handleCreateJob}
         onBatchUpsert={handleBatchUpsert}
         onGenerateForm={handleGenerateForm}
+        onLogDowntime={handleLogDowntime}
         messages={aiMessages}
         setMessages={setAiMessages}
       />
