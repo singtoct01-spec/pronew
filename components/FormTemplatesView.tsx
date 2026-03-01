@@ -1,15 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { FormTemplate } from '../types';
-import { FileText, Plus, Search, Trash2, Edit, Eye, Printer, Sparkles } from 'lucide-react';
+import { FileText, Plus, Search, Trash2, Eye, Sparkles, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface FormTemplatesViewProps {
   forms: FormTemplate[];
   onViewForm: (form: FormTemplate) => void;
   onDeleteForm: (id: string) => void;
+  onSaveForm: (html: string, title: string) => void;
 }
 
-export const FormTemplatesView: React.FC<FormTemplatesViewProps> = ({ forms, onViewForm, onDeleteForm }) => {
+export const FormTemplatesView: React.FC<FormTemplatesViewProps> = ({ forms, onViewForm, onDeleteForm, onSaveForm }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        
+        // Convert to HTML
+        let htmlString = XLSX.utils.sheet_to_html(ws);
+        
+        // Wrap in a styled container
+        const styledHtml = `
+          <div class="excel-template-container" style="font-family: 'Kanit', sans-serif; width: 100%; overflow-x: auto;">
+            <style>
+              .excel-template-container table { border-collapse: collapse; width: 100%; }
+              .excel-template-container th, .excel-template-container td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+              .excel-template-container th { background-color: #f8fafc; font-weight: 600; }
+            </style>
+            ${htmlString}
+          </div>
+        `;
+        
+        // Remove the .xlsx extension for the title
+        const title = file.name.replace(/\.[^/.]+$/, "");
+        
+        onSaveForm(styledHtml, title);
+        
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      } catch (error) {
+        console.error("Error parsing Excel file:", error);
+        alert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel");
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
 
   const filteredForms = forms.filter(f => 
     f.title.toLowerCase().includes(searchTerm.toLowerCase())
@@ -30,6 +77,20 @@ export const FormTemplatesView: React.FC<FormTemplatesViewProps> = ({ forms, onV
           />
         </div>
         <div className="flex gap-2 w-full md:w-auto">
+           <input 
+             type="file" 
+             accept=".xlsx, .xls" 
+             className="hidden" 
+             ref={fileInputRef}
+             onChange={handleFileUpload}
+           />
+           <button 
+             className="flex-1 md:flex-none bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded-xl font-medium hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+             onClick={() => fileInputRef.current?.click()}
+           >
+             <Upload size={18} />
+             <span>อัปโหลด Excel</span>
+           </button>
            <button 
              className="flex-1 md:flex-none bg-brand-50 text-brand-700 px-4 py-2 rounded-xl font-medium hover:bg-brand-100 transition-colors flex items-center justify-center gap-2"
              onClick={() => alert('หากต้องการสร้างฟอร์มใหม่ กรุณาเปิดผู้ช่วย AI แล้วส่งรูปภาพหรือคำสั่งให้ AI สร้างให้ครับ')}

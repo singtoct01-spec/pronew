@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage, FormTemplate } from '../types';
 import { Send, Bot, X, Loader2, CheckCircle, AlertTriangle, Paperclip, Image as ImageIcon, Trash2, BrainCircuit, FileSpreadsheet, MessageSquareText, Key } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface SmartAssistantProps {
   isOpen: boolean;
@@ -114,13 +115,6 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   const processExcelFile = async (file: File) => {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      // Use global XLSX from CDN
-      const XLSX = (window as any).XLSX;
-      if (!XLSX) {
-        console.error("XLSX library not loaded");
-        return;
-      }
-
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
@@ -210,7 +204,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             productSpecifications: specs,
             machineMoldCapabilities: machineCapabilities
         },
-        savedFormTemplates: formTemplates?.map(f => ({ id: f.id, title: f.title })) || []
+        savedFormTemplates: formTemplates?.map(f => ({ id: f.id, title: f.title, html: f.html })) || []
       };
 
       // 2. Initialize Gemini
@@ -272,7 +266,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         (Use "type": "UPDATE" or "CREATE" for single actions, or "BATCH_UPSERT" for multiple jobs. For BATCH_UPSERT, the system will update existing jobs by jobOrder, or create them if they don't exist.)
         
         - If the user asks you to create a form, document, or tag (especially if they upload an image of a template and ask you to use it), you can generate a custom HTML template for it. Use Tailwind CSS classes for styling. Return a JSON action with \`type: 'GENERATE_FORM'\`, \`html: '<div class=\"...\">...</div>'\`, and \`title: 'Form Title'\`. The HTML should be a complete, printable document layout. You can use data from the current jobs if the user specifies.
-        - If the user asks to use an existing form template, you can refer to the \`savedFormTemplates\` in the context. However, to actually use it, you might need to generate the HTML again or instruct the user to go to the "แบบฟอร์มเอกสาร" menu. For now, you can generate a new form based on their request.
+        - If the user asks to use an existing form template, you can refer to the \`savedFormTemplates\` in the context. You can generate a new form by taking the \`html\` of the saved template and modifying it to insert the requested data (e.g., job details, inventory data). Return a JSON action with \`type: 'GENERATE_FORM'\`, the modified \`html\`, and a new \`title\`.
         \`\`\`json
         {
           "type": "GENERATE_FORM",

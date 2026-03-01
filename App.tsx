@@ -313,6 +313,7 @@ const App: React.FC = () => {
             setCurrentView('custom-form');
           }}
           onDeleteForm={handleDeleteFormTemplate}
+          onSaveForm={handleSaveFormTemplate}
         />;
       default:
         return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} />;
