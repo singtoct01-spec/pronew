@@ -25,7 +25,7 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // State for data management
-  const [jobs, setJobs] = useState<ProductionJob[]>(MOCK_DATA);
+  const [jobs, setJobs] = useState<ProductionJob[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);

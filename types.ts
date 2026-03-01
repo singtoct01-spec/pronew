@@ -395,7 +395,7 @@ export const PRODUCT_SPECS: ProductSpec[] = [
 ];
 
 // Updated Simulated Time to match the "Current" state of the plan (Feb 22 Evening)
-export const SIMULATED_NOW = new Date('2026-02-22T22:00:00'); 
+export const SIMULATED_NOW = new Date(); 
 
 export const MOCK_INVENTORY: InventoryItem[] = [
   // Raw Materials

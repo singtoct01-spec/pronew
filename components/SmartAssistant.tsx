@@ -6,7 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage } from '../types';
-import { Send, Bot, X, Loader2, CheckCircle, AlertTriangle, Paperclip, Image as ImageIcon, Trash2, BrainCircuit, FileSpreadsheet, MessageSquareText } from 'lucide-react';
+import { Send, Bot, X, Loader2, CheckCircle, AlertTriangle, Paperclip, Image as ImageIcon, Trash2, BrainCircuit, FileSpreadsheet, MessageSquareText, Key } from 'lucide-react';
 
 interface SmartAssistantProps {
   isOpen: boolean;
@@ -47,8 +47,27 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [savedApiKey, setSavedApiKey] = useState(() => localStorage.getItem('proplanner_gemini_api_key') || '');
+  const [showKeySetup, setShowKeySetup] = useState(!localStorage.getItem('proplanner_gemini_api_key'));
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSaveApiKey = () => {
+    if (apiKeyInput.trim()) {
+      localStorage.setItem('proplanner_gemini_api_key', apiKeyInput.trim());
+      setSavedApiKey(apiKeyInput.trim());
+      setShowKeySetup(false);
+    }
+  };
+
+  const handleRemoveApiKey = () => {
+    localStorage.removeItem('proplanner_gemini_api_key');
+    setSavedApiKey('');
+    setApiKeyInput('');
+    setShowKeySetup(true);
+  };
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -188,7 +207,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       };
 
       // 2. Initialize Gemini
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: savedApiKey });
       
       // 3. Construct System Prompt (UPGRADED)
       const systemPrompt = `
@@ -221,7 +240,32 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         **RESPONSE FORMAT:**
         - Talk naturally in Thai.
         - Use emojis 🏭 ⚠️ ✅ appropriately.
-        - If an action is clear (like "Update job status"), append the JSON block for Action Proposal.
+        - If an action is clear (like "Update job status", "Create new job", or "Import schedule from image"), append a JSON block for Action Proposal EXACTLY in this format:
+        \`\`\`json
+        {
+          "type": "BATCH_UPSERT",
+          "data": [
+            {
+              "jobOrder": "B6902-055",
+              "machineId": "IP1",
+              "productItem": "P45",
+              "moldCode": "P45",
+              "capacityPerShift": 5760,
+              "totalProduction": 57600,
+              "actualProduction": 25200,
+              "color": "-",
+              "startDate": "2026-02-12T09:00:00Z",
+              "endDate": "2026-02-23T20:00:00Z",
+              "status": "Running",
+              "remarks": ""
+            }
+          ]
+        }
+        \`\`\`
+        (Use "type": "UPDATE" or "CREATE" for single actions, or "BATCH_UPSERT" for multiple jobs. For BATCH_UPSERT, the system will update existing jobs by jobOrder, or create them if they don't exist.)
+        
+        **IMAGE EXTRACTION RULES:**
+        - When extracting from images, you MUST extract ALL columns including "ยอดการผลิตได้" (actualProduction), "Cap ต่อกะ" (capacityPerShift), "รหัสแม่พิมพ์" (moldCode), "สี" (color), and "หมายเหตุ" (remarks). Do not leave them out.
         
         FULL SYSTEM CONTEXT:
         ${JSON.stringify(fullSystemContext)}
@@ -292,7 +336,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       console.error("AI Error:", error);
       setMessages(prev => [...prev, { 
         role: 'model', 
-        text: 'ระบบสมองกลขัดข้องชั่วคราว (Network/API Error) กรุณาลองใหม่ครับ',
+        text: 'ระบบสมองกลขัดข้องชั่วคราว (Network/API Error) กรุณาตรวจสอบ API Key หรือการเชื่อมต่ออินเทอร์เน็ตครับ',
         timestamp: new Date().toISOString()
       }]);
     } finally {
@@ -300,42 +344,152 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     }
   };
 
-  const executeAction = (proposal: any) => {
-    if (proposal.type === 'UPDATE') {
+  const executeAction = (proposal: any, msgIndex: number) => {
+    const type = proposal.type ? String(proposal.type).toUpperCase() : '';
+    let responseText = '';
+
+    if (type === 'UPDATE') {
       const targetJob = jobs.find(j => 
-        j.jobOrder === proposal.data.jobOrder || 
-        j.id === proposal.data.id || 
-        (j.machineId === proposal.data.machineId && j.productItem === proposal.data.productItem)
+        j.jobOrder === proposal.data?.jobOrder || 
+        j.id === proposal.data?.id || 
+        (j.machineId === proposal.data?.machineId && j.productItem === proposal.data?.productItem)
       );
       
       if (targetJob) {
         const updatedJob = { ...targetJob, ...proposal.data };
         onUpdateJob(updatedJob);
-        setMessages(prev => [...prev, { role: 'model', text: `✅ บันทึกการแก้ไขข้อมูล ${targetJob.jobOrder || targetJob.productItem} เรียบร้อย`, timestamp: new Date().toISOString() }]);
+        responseText = `✅ บันทึกการแก้ไขข้อมูล ${targetJob.jobOrder || targetJob.productItem} เรียบร้อย`;
       } else {
-        setMessages(prev => [...prev, { role: 'model', text: `❌ ไม่พบรายการผลิตที่ตรงกันในระบบครับ`, timestamp: new Date().toISOString() }]);
+        responseText = `❌ ไม่พบรายการผลิตที่ตรงกันในระบบครับ (อ้างอิง: ${proposal.data?.jobOrder || proposal.data?.productItem || 'ไม่ระบุ'})`;
       }
-    } else if (proposal.type === 'CREATE') {
+    } else if (type === 'CREATE') {
       const newJob: ProductionJob = {
          id: `new-${Date.now()}`,
-         machineId: proposal.data.machineId || 'Unknown',
-         productItem: proposal.data.productItem || 'New Item',
-         moldCode: proposal.data.moldCode || '-',
-         jobOrder: proposal.data.jobOrder || `AUTO-${Date.now()}`,
+         machineId: proposal.data?.machineId || 'Unknown',
+         productItem: proposal.data?.productItem || 'New Item',
+         moldCode: proposal.data?.moldCode || '-',
+         jobOrder: proposal.data?.jobOrder || `AUTO-${Date.now()}`,
          capacityPerShift: 0,
-         totalProduction: proposal.data.totalProduction || 0,
+         totalProduction: proposal.data?.totalProduction || 0,
          color: '-',
-         startDate: proposal.data.startDate || SIMULATED_NOW.toISOString(),
-         endDate: proposal.data.endDate || SIMULATED_NOW.toISOString(),
+         startDate: proposal.data?.startDate || SIMULATED_NOW.toISOString(),
+         endDate: proposal.data?.endDate || SIMULATED_NOW.toISOString(),
          status: 'Running',
          ...proposal.data
       };
       onCreateJob(newJob);
-      setMessages(prev => [...prev, { role: 'model', text: `✅ สร้างรายการผลิตใหม่ ${newJob.jobOrder} ลงตารางเรียบร้อย`, timestamp: new Date().toISOString() }]);
+      responseText = `✅ สร้างรายการผลิตใหม่ ${newJob.jobOrder} ลงตารางเรียบร้อย`;
+    } else if (type === 'BATCH_UPSERT' && Array.isArray(proposal.data)) {
+      let created = 0;
+      let updated = 0;
+      
+      proposal.data.forEach((item: any, index: number) => {
+        const targetJob = jobs.find(j => 
+          (item.jobOrder && j.jobOrder === item.jobOrder) || 
+          (item.id && j.id === item.id)
+        );
+
+        if (targetJob) {
+          const updatedJob = { ...targetJob, ...item };
+          onUpdateJob(updatedJob);
+          updated++;
+        } else {
+          const newJob: ProductionJob = {
+             id: `new-${Date.now()}-${index}`,
+             machineId: item.machineId || 'Unknown',
+             productItem: item.productItem || 'New Item',
+             moldCode: item.moldCode || '-',
+             jobOrder: item.jobOrder || `AUTO-${Date.now()}-${index}`,
+             capacityPerShift: item.capacityPerShift || 0,
+             totalProduction: item.totalProduction || 0,
+             actualProduction: item.actualProduction || 0,
+             color: item.color || '-',
+             startDate: item.startDate || SIMULATED_NOW.toISOString(),
+             endDate: item.endDate || SIMULATED_NOW.toISOString(),
+             status: item.status || 'Running',
+             ...item
+          };
+          onCreateJob(newJob);
+          created++;
+        }
+      });
+      
+      responseText = `✅ นำเข้าข้อมูลสำเร็จ: สร้างใหม่ ${created} รายการ, อัปเดต ${updated} รายการ`;
+    } else {
+      responseText = `❌ รูปแบบคำสั่งไม่ถูกต้อง (Unknown Action Type: ${proposal.type || 'None'})`;
     }
+
+    setMessages(prev => {
+      const newMessages = [...prev];
+      if (newMessages[msgIndex]) {
+        newMessages[msgIndex] = { ...newMessages[msgIndex], actionProposal: undefined };
+      }
+      newMessages.push({ role: 'model', text: responseText, timestamp: new Date().toISOString() });
+      return newMessages;
+    });
   };
 
   if (!isOpen) return null;
+
+  if (showKeySetup) {
+    return (
+      <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300 font-kanit">
+        {/* Header */}
+        <div className="p-4 bg-slate-900 text-white flex justify-between items-center shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <BrainCircuit size={24} />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg">ProPlanner Brain</h2>
+              <p className="text-xs text-indigo-200">ตั้งค่าการเชื่อมต่อ AI</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* Setup Body */}
+        <div className="flex-1 p-6 flex flex-col justify-center items-center bg-slate-50 text-center">
+          <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
+            <Key size={32} />
+          </div>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">ตั้งค่า Gemini API Key</h3>
+          <p className="text-sm text-slate-600 mb-6 max-w-xs leading-relaxed">
+            เพื่อใช้งานผู้ช่วยอัจฉริยะ คุณจำเป็นต้องใส่ API Key ของคุณเอง <br/>
+            <span className="text-xs text-slate-400">(คีย์จะถูกบันทึกไว้ในเบราว์เซอร์ของคุณเท่านั้น ไม่มีการส่งไปเก็บที่เซิร์ฟเวอร์อื่น)</span>
+          </p>
+          
+          <div className="w-full max-w-sm space-y-4">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="ใส่ API Key ที่ขึ้นต้นด้วย AIzaSy..."
+              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
+            />
+            <button
+              onClick={handleSaveApiKey}
+              disabled={!apiKeyInput.trim()}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-medium py-3 rounded-xl transition-colors shadow-md"
+            >
+              บันทึก API Key และเริ่มใช้งาน
+            </button>
+            
+            <a 
+              href="https://aistudio.google.com/app/apikey" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="block text-sm text-indigo-600 hover:text-indigo-800 underline mt-4"
+            >
+              รับ Gemini API Key ฟรีที่นี่
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300 font-kanit">
@@ -350,9 +504,14 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             <p className="text-xs text-indigo-200">ระบบอัจฉริยะ & ฐานข้อมูล Master</p>
           </div>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
-          <X size={24} />
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleRemoveApiKey} className="text-xs text-slate-400 hover:text-white underline" title="เปลี่ยน API Key">
+            เปลี่ยน Key
+          </button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <X size={24} />
+          </button>
+        </div>
       </div>
 
       {/* Chat Area */}
@@ -396,7 +555,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                   </div>
                   <div className="flex gap-2">
                     <button 
-                      onClick={() => executeAction(msg.actionProposal)}
+                      onClick={() => executeAction(msg.actionProposal, idx)}
                       className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1"
                     >
                       <CheckCircle size={14} /> ยืนยัน (Approve)
