@@ -32,9 +32,9 @@ const App: React.FC = () => {
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   
-  // Fetch jobs from Firebase
+  // Fetch jobs and logs from Firebase
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'jobs'), (snapshot) => {
+    const unsubscribeJobs = onSnapshot(collection(db, 'jobs'), (snapshot) => {
       const jobsData: ProductionJob[] = [];
       snapshot.forEach((doc) => {
         jobsData.push(doc.data() as ProductionJob);
@@ -44,7 +44,22 @@ const App: React.FC = () => {
       console.error("Error fetching jobs from Firebase:", error);
     });
 
-    return () => unsubscribe();
+    const unsubscribeLogs = onSnapshot(collection(db, 'logs'), (snapshot) => {
+      const logsData: AuditLog[] = [];
+      snapshot.forEach((doc) => {
+        logsData.push(doc.data() as AuditLog);
+      });
+      // Sort logs by timestamp descending
+      logsData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setLogs(logsData);
+    }, (error) => {
+      console.error("Error fetching logs from Firebase:", error);
+    });
+
+    return () => {
+      unsubscribeJobs();
+      unsubscribeLogs();
+    };
   }, []);
   
   // Specific View States
@@ -53,10 +68,7 @@ const App: React.FC = () => {
   const [tagJob, setTagJob] = useState<ProductionJob | null>(null);
 
   // New: Logs & AI History State
-  const [logs, setLogs] = useState<AuditLog[]>([
-    { id: 'l1', timestamp: new Date(Date.now() - 1000000).toISOString(), action: 'SYSTEM', user: 'System', details: 'Initialized Production Plan data' },
-    { id: 'l2', timestamp: new Date(Date.now() - 800000).toISOString(), action: 'UPDATE', user: 'Manager', details: 'Updated Job JO-2026-002 status to Delayed', targetId: 'j2' }
-  ]);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([
     { 
       role: 'model', 
@@ -65,16 +77,21 @@ const App: React.FC = () => {
     }
   ]);
 
-  const addLog = (action: AuditLog['action'], details: string, targetId?: string) => {
+  const addLog = async (action: AuditLog['action'], details: string, targetId?: string, currentJobsSnapshot?: ProductionJob[]) => {
     const newLog: AuditLog = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: new Date().toISOString(),
       action,
       user: 'Manager', // Mock user
       details,
-      targetId
+      targetId,
+      snapshot: currentJobsSnapshot || jobs // Save the snapshot of jobs
     };
-    setLogs(prev => [...prev, newLog]);
+    try {
+      await setDoc(doc(db, 'logs', newLog.id), newLog);
+    } catch (error) {
+      console.error("Error saving log to Firebase:", error);
+    }
   };
 
   const handleEditJob = (job: ProductionJob) => {
@@ -100,7 +117,9 @@ const App: React.FC = () => {
   const handleSaveJob = async (updatedJob: ProductionJob) => {
     try {
       await setDoc(doc(db, 'jobs', updatedJob.id), updatedJob);
-      addLog('UPDATE', `แก้ไขงาน ${updatedJob.jobOrder} (${updatedJob.productItem}) - สถานะ: ${updatedJob.status}`, updatedJob.id);
+      const newJobs = jobs.map(j => j.id === updatedJob.id ? updatedJob : j);
+      if (!jobs.find(j => j.id === updatedJob.id)) newJobs.push(updatedJob);
+      addLog('UPDATE', `แก้ไขงาน ${updatedJob.jobOrder} (${updatedJob.productItem}) - สถานะ: ${updatedJob.status}`, updatedJob.id, newJobs);
     } catch (error) {
       console.error("Error saving job to Firebase:", error);
     }
@@ -109,9 +128,52 @@ const App: React.FC = () => {
   const handleCreateJob = async (newJob: ProductionJob) => {
     try {
       await setDoc(doc(db, 'jobs', newJob.id), newJob);
-      addLog('CREATE', `สร้างงานผลิตใหม่ ${newJob.jobOrder} เครื่อง ${newJob.machineId}`, newJob.id);
+      const newJobs = [...jobs, newJob];
+      addLog('CREATE', `สร้างงานผลิตใหม่ ${newJob.jobOrder} เครื่อง ${newJob.machineId}`, newJob.id, newJobs);
     } catch (error) {
       console.error("Error creating job in Firebase:", error);
+    }
+  };
+
+  const handleBatchUpsert = async (batchJobs: ProductionJob[]) => {
+    try {
+      let newJobs = [...jobs];
+      for (const job of batchJobs) {
+        await setDoc(doc(db, 'jobs', job.id), job);
+        const existingIndex = newJobs.findIndex(j => j.id === job.id);
+        if (existingIndex !== -1) {
+          newJobs[existingIndex] = job;
+        } else {
+          newJobs.push(job);
+        }
+      }
+      addLog('CREATE', `นำเข้าข้อมูล/อัปเดตงานผลิตจำนวน ${batchJobs.length} รายการ`, undefined, newJobs);
+    } catch (error) {
+      console.error("Error batch upserting jobs in Firebase:", error);
+    }
+  };
+
+  const handleRevert = async (logToRevert: AuditLog) => {
+    if (!logToRevert.snapshot) return;
+
+    try {
+      // 1. Delete all current jobs
+      for (const job of jobs) {
+        await deleteDoc(doc(db, 'jobs', job.id));
+      }
+
+      // 2. Insert all jobs from snapshot
+      for (const job of logToRevert.snapshot) {
+        await setDoc(doc(db, 'jobs', job.id), job);
+      }
+
+      // 3. Log the revert action
+      addLog('REVERT', `ย้อนกลับข้อมูลไปยังเวลา ${new Date(logToRevert.timestamp).toLocaleString('th-TH')}`, undefined, logToRevert.snapshot);
+      
+      alert("ย้อนกลับข้อมูลสำเร็จ!");
+    } catch (error) {
+      console.error("Error reverting jobs:", error);
+      alert("เกิดข้อผิดพลาดในการย้อนกลับข้อมูล");
     }
   };
 
@@ -183,7 +245,7 @@ const App: React.FC = () => {
       case 'master-data':
         return <KnowledgeBase />;
       case 'history':
-        return <HistoryLog logs={logs} aiMessages={aiMessages} />;
+        return <HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />;
       default:
         return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} />;
     }
@@ -265,6 +327,7 @@ const App: React.FC = () => {
         machineCapabilities={MACHINE_MOLD_CAPABILITIES}
         onUpdateJob={handleSaveJob}
         onCreateJob={handleCreateJob}
+        onBatchUpsert={handleBatchUpsert}
         messages={aiMessages}
         setMessages={setAiMessages}
       />

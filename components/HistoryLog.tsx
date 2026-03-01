@@ -1,18 +1,28 @@
 
 import React, { useState } from 'react';
 import { AuditLog, AiMessage } from '../types';
-import { History, MessageSquare, Bot, User, Clock, FileText } from 'lucide-react';
+import { History, MessageSquare, Bot, User, Clock, FileText, RotateCcw } from 'lucide-react';
 
 interface HistoryLogProps {
   logs: AuditLog[];
   aiMessages: AiMessage[];
+  onRevert: (log: AuditLog) => void;
 }
 
-export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages }) => {
+export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onRevert }) => {
   const [activeTab, setActiveTab] = useState<'system' | 'ai'>('system');
 
   const formatDate = (isoStr: string) => {
     return new Date(isoStr).toLocaleString('th-TH');
+  };
+
+  const handleRevertClick = (log: AuditLog) => {
+    const password = prompt("กรุณาใส่รหัสผ่านเพื่อย้อนกลับข้อมูล:");
+    if (password === "kpbom-a0784") {
+      onRevert(log);
+    } else if (password !== null) {
+      alert("รหัสผ่านไม่ถูกต้อง!");
+    }
   };
 
   return (
@@ -47,10 +57,11 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages }) => {
                         <th className="px-6 py-4">ผู้ใช้งาน</th>
                         <th className="px-6 py-4">การกระทำ</th>
                         <th className="px-6 py-4">รายละเอียด</th>
+                        <th className="px-6 py-4 text-right">ย้อนกลับ</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                    {logs.length > 0 ? [...logs].reverse().map(log => (
+                    {logs.length > 0 ? logs.map(log => (
                         <tr key={log.id} className="hover:bg-slate-50">
                             <td className="px-6 py-4 font-mono text-slate-500 whitespace-nowrap">
                                 {formatDate(log.timestamp)}
@@ -63,6 +74,7 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages }) => {
                                     log.action === 'CREATE' ? 'bg-emerald-100 text-emerald-700' :
                                     log.action === 'UPDATE' ? 'bg-blue-100 text-blue-700' :
                                     log.action === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                    log.action === 'REVERT' ? 'bg-purple-100 text-purple-700' :
                                     'bg-slate-100 text-slate-600'
                                 }`}>
                                     {log.action}
@@ -71,10 +83,21 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages }) => {
                             <td className="px-6 py-4 text-slate-600">
                                 {log.details}
                             </td>
+                            <td className="px-6 py-4 text-right">
+                                {log.snapshot && (
+                                    <button 
+                                        onClick={() => handleRevertClick(log)}
+                                        className="text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 p-2 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-medium"
+                                        title="ย้อนกลับข้อมูลไปที่จุดนี้"
+                                    >
+                                        <RotateCcw size={14} /> ย้อนกลับ
+                                    </button>
+                                )}
+                            </td>
                         </tr>
                     )) : (
                         <tr>
-                            <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
+                            <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
                                 ยังไม่มีประวัติการเปลี่ยนแปลง
                             </td>
                         </tr>

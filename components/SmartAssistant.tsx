@@ -18,6 +18,7 @@ interface SmartAssistantProps {
   machineCapabilities: MachineMoldCapability[];
   onUpdateJob: (job: ProductionJob) => void;
   onCreateJob: (job: ProductionJob) => void;
+  onBatchUpsert?: (jobs: ProductionJob[]) => void;
   messages: AiMessage[];
   setMessages: React.Dispatch<React.SetStateAction<AiMessage[]>>;
 }
@@ -40,6 +41,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   machineCapabilities,
   onUpdateJob,
   onCreateJob,
+  onBatchUpsert,
   messages,
   setMessages
 }) => {
@@ -414,6 +416,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     } else if (type === 'BATCH_UPSERT' && Array.isArray(proposal.data)) {
       let created = 0;
       let updated = 0;
+      const batchJobs: ProductionJob[] = [];
       
       proposal.data.forEach((item: any, index: number) => {
         const targetJob = jobs.find(j => 
@@ -423,7 +426,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
 
         if (targetJob) {
           const updatedJob = { ...targetJob, ...item };
-          onUpdateJob(updatedJob);
+          batchJobs.push(updatedJob);
           updated++;
         } else {
           const newJob: ProductionJob = {
@@ -441,10 +444,20 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
              status: item.status || 'Running',
              ...item
           };
-          onCreateJob(newJob);
+          batchJobs.push(newJob);
           created++;
         }
       });
+      
+      if (onBatchUpsert) {
+        onBatchUpsert(batchJobs);
+      } else {
+        // Fallback if onBatchUpsert is not provided
+        batchJobs.forEach(job => {
+          if (jobs.find(j => j.id === job.id)) onUpdateJob(job);
+          else onCreateJob(job);
+        });
+      }
       
       responseText = `✅ นำเข้าข้อมูลสำเร็จ: สร้างใหม่ ${created} รายการ, อัปเดต ${updated} รายการ`;
     } else {

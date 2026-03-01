@@ -162,10 +162,11 @@ export interface AiMessage {
 export interface AuditLog {
   id: string;
   timestamp: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'SYSTEM';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'SYSTEM' | 'REVERT';
   user: string;
   details: string;
   targetId?: string;
+  snapshot?: ProductionJob[]; // Store the state of jobs at this point in time
 }
 // ----------------------------------
 
