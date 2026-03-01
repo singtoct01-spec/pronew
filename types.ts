@@ -168,6 +168,14 @@ export interface AuditLog {
   targetId?: string;
   snapshot?: ProductionJob[]; // Store the state of jobs at this point in time
 }
+
+export interface FormTemplate {
+  id: string;
+  title: string;
+  html: string;
+  createdAt: string;
+  updatedAt: string;
+}
 // ----------------------------------
 
 // Expanded Capabilities for Knowledge Base

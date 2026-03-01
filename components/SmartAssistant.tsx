@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage } from '../types';
+import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage, FormTemplate } from '../types';
 import { Send, Bot, X, Loader2, CheckCircle, AlertTriangle, Paperclip, Image as ImageIcon, Trash2, BrainCircuit, FileSpreadsheet, MessageSquareText, Key } from 'lucide-react';
 
 interface SmartAssistantProps {
@@ -16,9 +16,11 @@ interface SmartAssistantProps {
   boms: ProductBOM[];
   specs: ProductSpec[];
   machineCapabilities: MachineMoldCapability[];
+  formTemplates?: FormTemplate[];
   onUpdateJob: (job: ProductionJob) => void;
   onCreateJob: (job: ProductionJob) => void;
   onBatchUpsert?: (jobs: ProductionJob[]) => void;
+  onGenerateForm?: (html: string, title: string) => void;
   messages: AiMessage[];
   setMessages: React.Dispatch<React.SetStateAction<AiMessage[]>>;
 }
@@ -39,9 +41,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   boms,
   specs,
   machineCapabilities,
+  formTemplates,
   onUpdateJob,
   onCreateJob,
   onBatchUpsert,
+  onGenerateForm,
   messages,
   setMessages
 }) => {
@@ -205,7 +209,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             recipesBOM: boms,
             productSpecifications: specs,
             machineMoldCapabilities: machineCapabilities
-        }
+        },
+        savedFormTemplates: formTemplates?.map(f => ({ id: f.id, title: f.title })) || []
       };
 
       // 2. Initialize Gemini
@@ -266,8 +271,19 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         \`\`\`
         (Use "type": "UPDATE" or "CREATE" for single actions, or "BATCH_UPSERT" for multiple jobs. For BATCH_UPSERT, the system will update existing jobs by jobOrder, or create them if they don't exist.)
         
+        - If the user asks you to create a form, document, or tag (especially if they upload an image of a template and ask you to use it), you can generate a custom HTML template for it. Use Tailwind CSS classes for styling. Return a JSON action with \`type: 'GENERATE_FORM'\`, \`html: '<div class=\"...\">...</div>'\`, and \`title: 'Form Title'\`. The HTML should be a complete, printable document layout. You can use data from the current jobs if the user specifies.
+        - If the user asks to use an existing form template, you can refer to the \`savedFormTemplates\` in the context. However, to actually use it, you might need to generate the HTML again or instruct the user to go to the "แบบฟอร์มเอกสาร" menu. For now, you can generate a new form based on their request.
+        \`\`\`json
+        {
+          "type": "GENERATE_FORM",
+          "title": "ใบแจ้งงานผลิต",
+          "html": "<div class=\\"p-8 bg-white text-black\\"><h1 class=\\"text-2xl font-bold text-center\\">ใบแจ้งงานผลิต</h1>...</div>"
+        }
+        \`\`\`
+
         **IMAGE EXTRACTION RULES:**
         - When extracting from images, you MUST extract ALL columns including "ยอดการผลิตได้" (actualProduction), "Cap ต่อกะ" (capacityPerShift), "รหัสแม่พิมพ์" (moldCode), "สี" (color), and "หมายเหตุ" (remarks). Do not leave them out.
+        - If the image is a form template and the user wants to create a form based on it, extract its structure and generate a \`GENERATE_FORM\` action.
         
         FULL SYSTEM CONTEXT:
         ${JSON.stringify(fullSystemContext)}
@@ -460,6 +476,13 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       }
       
       responseText = `✅ นำเข้าข้อมูลสำเร็จ: สร้างใหม่ ${created} รายการ, อัปเดต ${updated} รายการ`;
+    } else if (type === 'GENERATE_FORM') {
+      if (onGenerateForm && proposal.html) {
+        onGenerateForm(proposal.html, proposal.title || 'เอกสารที่สร้างโดย AI');
+        responseText = `✅ สร้างเอกสาร "${proposal.title || 'เอกสาร'}" เรียบร้อยแล้ว ระบบกำลังเปิดหน้าต่างเอกสาร...`;
+      } else {
+        responseText = `❌ ไม่สามารถสร้างเอกสารได้ (ระบบไม่รองรับ หรือ ข้อมูล HTML ไม่สมบูรณ์)`;
+      }
     } else {
       responseText = `❌ รูปแบบคำสั่งไม่ถูกต้อง (Unknown Action Type: ${proposal.type || 'None'})`;
     }

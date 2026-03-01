@@ -19,8 +19,12 @@ import { InventoryView } from './components/InventoryView';
 import { HistoryLog } from './components/HistoryLog';
 import { KnowledgeBase } from './components/KnowledgeBase';
 import { ProductionAnalysis } from './components/ProductionAnalysis';
-import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage } from './types';
+import { CustomFormView } from './components/CustomFormView';
+import { FormTemplatesView } from './components/FormTemplatesView';
+import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate } from './types';
 import { Menu, Sparkles } from 'lucide-react';
+
+export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -56,9 +60,21 @@ const App: React.FC = () => {
       console.error("Error fetching logs from Firebase:", error);
     });
 
+    const unsubscribeForms = onSnapshot(collection(db, 'forms'), (snapshot) => {
+      const formsData: FormTemplate[] = [];
+      snapshot.forEach((doc) => {
+        formsData.push(doc.data() as FormTemplate);
+      });
+      formsData.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      setFormTemplates(formsData);
+    }, (error) => {
+      console.error("Error fetching forms from Firebase:", error);
+    });
+
     return () => {
       unsubscribeJobs();
       unsubscribeLogs();
+      unsubscribeForms();
     };
   }, []);
   
@@ -66,9 +82,11 @@ const App: React.FC = () => {
   const [viewingOrderJob, setViewingOrderJob] = useState<ProductionJob | null>(null);
   const [handoverJobs, setHandoverJobs] = useState<ProductionJob[]>([]);
   const [tagJob, setTagJob] = useState<ProductionJob | null>(null);
+  const [customForm, setCustomForm] = useState<{ html: string, title: string, id?: string } | null>(null);
 
   // New: Logs & AI History State
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([
     { 
       role: 'model', 
@@ -177,6 +195,38 @@ const App: React.FC = () => {
     }
   };
 
+  const handleGenerateForm = (html: string, title: string) => {
+    setCustomForm({ html, title });
+    setCurrentView('custom-form');
+    setIsAssistantOpen(false); // Close assistant to see the form
+  };
+
+  const handleSaveFormTemplate = async (html: string, title: string) => {
+    try {
+      const newForm: FormTemplate = {
+        id: `form-${Date.now()}`,
+        title,
+        html,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, 'forms', newForm.id), newForm);
+      setCustomForm(prev => prev ? { ...prev, id: newForm.id } : null);
+      alert('บันทึกแบบฟอร์มสำเร็จ');
+    } catch (error) {
+      console.error("Error saving form template:", error);
+      alert('เกิดข้อผิดพลาดในการบันทึกแบบฟอร์ม');
+    }
+  };
+
+  const handleDeleteFormTemplate = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'forms', id));
+    } catch (error) {
+      console.error("Error deleting form template:", error);
+    }
+  };
+
   // If in "Print/Order" detail mode, render that separately for full screen
   if (currentView === 'order-detail' && viewingOrderJob) {
     return <ProductionOrderView job={viewingOrderJob} onBack={() => setCurrentView('plan')} />;
@@ -188,6 +238,15 @@ const App: React.FC = () => {
 
   if (currentView === 'tag-print' && tagJob) {
     return <ProductTagView job={tagJob} onBack={() => setCurrentView('list')} />;
+  }
+
+  if (currentView === 'custom-form' && customForm) {
+    return <CustomFormView 
+      html={customForm.html} 
+      title={customForm.title} 
+      onBack={() => setCurrentView('form-templates')} 
+      onSave={!customForm.id ? () => handleSaveFormTemplate(customForm.html, customForm.title) : undefined}
+    />;
   }
 
   const renderContent = () => {
@@ -246,6 +305,15 @@ const App: React.FC = () => {
         return <KnowledgeBase />;
       case 'history':
         return <HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />;
+      case 'form-templates':
+        return <FormTemplatesView 
+          forms={formTemplates} 
+          onViewForm={(form) => {
+            setCustomForm({ html: form.html, title: form.title, id: form.id });
+            setCurrentView('custom-form');
+          }}
+          onDeleteForm={handleDeleteFormTemplate}
+        />;
       default:
         return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} />;
     }
@@ -274,6 +342,7 @@ const App: React.FC = () => {
                  <button onClick={() => { setCurrentView('inventory'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">คลังวัตถุดิบ & BOM</button>
                  <button onClick={() => { setCurrentView('master-data'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">ฐานข้อมูลหลัก</button>
                  <button onClick={() => { setCurrentView('list'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">รายการงานทั้งหมด</button>
+                 <button onClick={() => { setCurrentView('form-templates'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">แบบฟอร์มเอกสาร</button>
                  <button onClick={() => { setCurrentView('history'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">ประวัติการทำงาน</button>
             </div>
         </div>
@@ -291,6 +360,8 @@ const App: React.FC = () => {
                      currentView === 'inventory' ? 'คลังวัตถุดิบ & สูตรผลิต (Inventory & BOM)' :
                      currentView === 'history' ? 'ประวัติการทำงาน (History Log)' :
                      currentView === 'tag-print' ? 'พิมพ์สติกเกอร์ (Print Tags)' :
+                     currentView === 'custom-form' ? customForm?.title || 'เอกสาร' :
+                     currentView === 'form-templates' ? 'แบบฟอร์มเอกสาร (Form Templates)' :
                      currentView === 'master-data' ? 'ฐานข้อมูลหลัก (Master Data)' :
                      currentView === 'machines' ? 'สถานะเครื่องจักร' : 'ตั้งค่า'}
                 </h1>
@@ -325,9 +396,11 @@ const App: React.FC = () => {
         boms={MOCK_BOMS}
         specs={PRODUCT_SPECS}
         machineCapabilities={MACHINE_MOLD_CAPABILITIES}
+        formTemplates={formTemplates}
         onUpdateJob={handleSaveJob}
         onCreateJob={handleCreateJob}
         onBatchUpsert={handleBatchUpsert}
+        onGenerateForm={handleGenerateForm}
         messages={aiMessages}
         setMessages={setAiMessages}
       />
