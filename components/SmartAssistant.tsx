@@ -498,7 +498,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     } else if (type === 'LOG_DOWNTIME') {
       if (onLogDowntime && proposal.data) {
         onLogDowntime(proposal.data);
-        responseText = `✅ บันทึกข้อมูลเครื่องจักรขัดข้อง (${proposal.data.machineId} - ${proposal.data.reason}) เรียบร้อยแล้ว`;
+        const dataPreview = Array.isArray(proposal.data) ? proposal.data[0] : proposal.data;
+        responseText = `✅ บันทึกข้อมูลเครื่องจักรขัดข้อง (${dataPreview?.machineId || 'หลายรายการ'} - ${dataPreview?.reason || ''}) เรียบร้อยแล้ว`;
       } else {
         responseText = `❌ ไม่สามารถบันทึกข้อมูลเครื่องจักรขัดข้องได้`;
       }

@@ -71,7 +71,7 @@ export const DowntimeLogsView: React.FC<DowntimeLogsViewProps> = ({ logs }) => {
             <p className="text-xl font-bold text-slate-800">
               {filteredLogs.length > 0 ? 
                 Object.entries(filteredLogs.reduce((acc, log) => { acc[log.machineId] = (acc[log.machineId] || 0) + 1; return acc; }, {} as Record<string, number>))
-                .sort((a, b) => b[1] - a[1])[0][0] 
+                .sort((a: [string, number], b: [string, number]) => b[1] - a[1])[0][0] 
                 : '-'}
             </p>
           </div>
