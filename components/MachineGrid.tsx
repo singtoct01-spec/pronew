@@ -1,5 +1,5 @@
 import React from 'react';
-import { ProductionJob, SIMULATED_NOW } from '../types';
+import { ProductionJob, SIMULATED_NOW, sortMachines } from '../types';
 import { Cpu, Zap, AlertTriangle, Play, Pause, AlertOctagon } from 'lucide-react';
 
 interface MachineGridProps {
@@ -9,7 +9,7 @@ interface MachineGridProps {
 
 export const MachineGrid: React.FC<MachineGridProps> = ({ jobs, onEditJob }) => {
   // Extract unique machines
-  const machineIds = Array.from(new Set(jobs.map(j => j.machineId))).sort() as string[];
+  const machineIds = sortMachines(Array.from(new Set(jobs.map(j => j.machineId))));
 
   const getMachineStatus = (machineId: string) => {
     // Find job active at SIMULATED_NOW

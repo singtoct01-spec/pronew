@@ -112,6 +112,40 @@ export interface ProductMoldMapping {
   moldCodes: string[];
 }
 
+export const sortMachines = (machineIds: string[]): string[] => {
+  const PREFIX_ORDER = ['IP', 'IO', 'AB', 'IB', 'B'];
+
+  const getMachineSortKey = (machineId: string) => {
+    const match = machineId.match(/^([A-Z]+)(\d+)?(.*)$/i);
+    if (!match) return { prefix: machineId, num: 0, suffix: '' };
+    return {
+      prefix: match[1].toUpperCase(),
+      num: match[2] ? parseInt(match[2], 10) : 0,
+      suffix: match[3] || ''
+    };
+  };
+
+  return [...machineIds].sort((a, b) => {
+    const keyA = getMachineSortKey(a);
+    const keyB = getMachineSortKey(b);
+
+    const indexA = PREFIX_ORDER.indexOf(keyA.prefix);
+    const indexB = PREFIX_ORDER.indexOf(keyB.prefix);
+
+    if (indexA !== -1 && indexB !== -1) {
+      if (indexA !== indexB) return indexA - indexB; // Sort by prefix order
+      if (keyA.num !== keyB.num) return keyA.num - keyB.num; // Sort by number
+      return keyA.suffix.localeCompare(keyB.suffix); // Sort by suffix if any
+    }
+    
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+
+    // Fallback
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
+};
+
 // --- New Types for History & AI ---
 export interface AiMessage {
   role: 'user' | 'model';

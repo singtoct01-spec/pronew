@@ -2,7 +2,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { ProductionJob, Status, SIMULATED_NOW, MOCK_INVENTORY, MOCK_BOMS } from '../types';
+import { ProductionJob, Status, SIMULATED_NOW, MOCK_INVENTORY, MOCK_BOMS, sortMachines } from '../types';
 import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp } from 'lucide-react';
 
 interface ProductionPlanProps {
@@ -10,15 +10,6 @@ interface ProductionPlanProps {
   onEditJob: (job: ProductionJob) => void;
   onViewOrder: (job: ProductionJob) => void;
 }
-
-// Updated Sort Order based on user request
-const MACHINE_SORT_ORDER = [
-  'IP1', 'IP2', 'IP3', 'IP4', 'IP5', 'IP6', 'IP7', 'IP8', 'IP10', 
-  'IO1', 'IO7', 'IO2', 'IO3', 'IO4', 'IO5', 'IO6', 
-  'AB1', 'AB2', 'AB3', 'AB4', 'AB5', 
-  'IB1', 
-  'B1', 'B6', 'B2', 'B3', 'B4', 'B5', 'B10', 'B7', 'B8'
-];
 
 export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob, onViewOrder }) => {
   const [now, setNow] = useState(new Date());
@@ -35,28 +26,20 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
   }, {} as { [key: string]: ProductionJob[] });
 
   // Ensure all known machines are in the list, even if they have no jobs
+  const ALL_KNOWN_MACHINES = [
+    'IP1', 'IP2', 'IP3', 'IP4', 'IP5', 'IP6', 'IP7', 'IP8', 'IP10', 
+    'IO1', 'IO7', 'IO2', 'IO3', 'IO4', 'IO5', 'IO6', 
+    'AB1', 'AB2', 'AB3', 'AB4', 'AB5', 
+    'IB1', 
+    'B1', 'B6', 'B2', 'B3', 'B4', 'B5', 'B10', 'B7', 'B8'
+  ];
+
   const allMachineIds = Array.from(new Set([
-    ...MACHINE_SORT_ORDER,
+    ...ALL_KNOWN_MACHINES,
     ...Object.keys(groupedJobs)
   ]));
 
-  const sortedMachineIds = allMachineIds.sort((a, b) => {
-    // 1. Try exact match in sort list first
-    let indexA = MACHINE_SORT_ORDER.indexOf(a);
-    let indexB = MACHINE_SORT_ORDER.indexOf(b);
-    
-    // 2. If not exact match, try startsWith
-    if (indexA === -1) indexA = MACHINE_SORT_ORDER.findIndex(prefix => a.startsWith(prefix));
-    if (indexB === -1) indexB = MACHINE_SORT_ORDER.findIndex(prefix => b.startsWith(prefix));
-    
-    // Compare indices
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA !== -1) return -1;
-    if (indexB !== -1) return 1;
-    
-    // Default alphabetical sort for unknown machines
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-  });
+  const sortedMachineIds = sortMachines(allMachineIds);
 
   // Sort jobs within each machine by date
   Object.keys(groupedJobs).forEach(machineId => {
@@ -90,6 +73,31 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
       case 'Planned': return 'รอดำเนินการ';
       default: return status;
     }
+  };
+
+  const getColorBadgeStyle = (colorName: string) => {
+    if (!colorName || colorName === '-' || colorName.trim() === '') return null;
+    
+    const name = colorName.toLowerCase();
+    let bg = 'bg-slate-100';
+    let text = 'text-slate-700';
+    let border = 'border-slate-200';
+
+    if (name.includes('ใส')) { bg = 'bg-slate-50'; text = 'text-slate-600'; border = 'border-slate-300'; }
+    else if (name.includes('ขาว')) { bg = 'bg-white'; text = 'text-slate-800'; border = 'border-slate-300'; }
+    else if (name.includes('ดำ')) { bg = 'bg-slate-900'; text = 'text-white'; border = 'border-slate-800'; }
+    else if (name.includes('แดง')) { bg = 'bg-red-500'; text = 'text-white'; border = 'border-red-600'; }
+    else if (name.includes('เขียว')) { bg = 'bg-emerald-500'; text = 'text-white'; border = 'border-emerald-600'; }
+    else if (name.includes('น้ำเงิน') || name.includes('ฟ้า')) { bg = 'bg-blue-500'; text = 'text-white'; border = 'border-blue-600'; }
+    else if (name.includes('เหลือง')) { bg = 'bg-yellow-400'; text = 'text-yellow-900'; border = 'border-yellow-500'; }
+    else if (name.includes('ชมพู')) { bg = 'bg-pink-400'; text = 'text-white'; border = 'border-pink-500'; }
+    else if (name.includes('ม่วง')) { bg = 'bg-purple-500'; text = 'text-white'; border = 'border-purple-600'; }
+    else if (name.includes('ส้ม')) { bg = 'bg-orange-500'; text = 'text-white'; border = 'border-orange-600'; }
+    else if (name.includes('ทอง')) { bg = 'bg-yellow-600'; text = 'text-white'; border = 'border-yellow-700'; }
+    else if (name.includes('เงิน') || name.includes('เทา')) { bg = 'bg-slate-400'; text = 'text-white'; border = 'border-slate-500'; }
+    else if (name.includes('ชา') || name.includes('น้ำตาล')) { bg = 'bg-amber-700'; text = 'text-white'; border = 'border-amber-800'; }
+
+    return `${bg} ${text} border ${border}`;
   };
 
   const formatDateShort = (dateString: string) => {
@@ -306,7 +314,14 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
                                         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
                                             <div className="flex-1 min-w-[200px]">
                                                 <div className="flex flex-wrap items-center gap-2 mb-1">
-                                                    <h4 className={`font-bold text-lg ${isDelayed || isUrgent ? 'text-red-700' : 'text-slate-800'}`}>{job.productItem}</h4>
+                                                    <h4 className={`font-bold text-lg ${isDelayed || isUrgent ? 'text-red-700' : 'text-slate-800'}`}>
+                                                        {job.productItem}
+                                                    </h4>
+                                                    {job.color && job.color !== '-' && (
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-medium shadow-sm ${getColorBadgeStyle(job.color)}`}>
+                                                            {job.color}
+                                                        </span>
+                                                    )}
                                                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getStatusColor(job.status)}`}>{getStatusTextThai(job.status)}</span>
                                                     {isShortage && <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 font-bold animate-pulse" title={`ขาดวัตถุดิบ: ${stockStatus.item}`}><AlertOctagon size={10}/> ขาดวัตถุดิบ!</span>}
                                                     {isUrgent && <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold animate-pulse"><Flame size={10}/> ด่วน!</span>}
