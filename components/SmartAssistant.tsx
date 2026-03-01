@@ -272,9 +272,27 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       `;
 
       // 4. Prepare Content Parts
-      const contents = [];
+      const contents: any[] = [];
       
       contents.push({ role: 'user', parts: [{ text: `SYSTEM_INSTRUCTION_AND_CONTEXT: ${systemPrompt}` }] });
+
+      // Add conversation history (limit to last 10 messages to save tokens and avoid context overflow)
+      const historyMessages = messages.slice(-10);
+      for (const msg of historyMessages) {
+        const parts: any[] = [{ text: msg.text }];
+        if (msg.image) {
+          const match = msg.image.match(/^data:(image\/\w+);base64,(.*)$/);
+          if (match) {
+            parts.push({
+              inlineData: {
+                mimeType: match[1],
+                data: match[2]
+              }
+            });
+          }
+        }
+        contents.push({ role: msg.role, parts });
+      }
 
       const userParts: any[] = [];
       
@@ -303,10 +321,24 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       
       contents.push({ role: 'user', parts: userParts });
 
+      // Sanitize contents to ensure alternating roles (user -> model -> user -> model)
+      const sanitizedContents: any[] = [];
+      let lastRole = '';
+      
+      for (const content of contents) {
+        if (content.role === lastRole) {
+           // If same role, merge parts into the previous content
+           sanitizedContents[sanitizedContents.length - 1].parts.push(...content.parts);
+        } else {
+           sanitizedContents.push(content);
+           lastRole = content.role;
+        }
+      }
+
       // 5. Call API
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: contents
+        contents: sanitizedContents
       });
 
       const responseText = response.text;

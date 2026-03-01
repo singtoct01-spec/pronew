@@ -1,7 +1,9 @@
 
 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db } from './firebase';
 import { Sidebar } from './components/Sidebar';
 import { DashboardStats } from './components/DashboardStats';
 import { JobTable } from './components/JobTable';
@@ -29,6 +31,21 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  
+  // Fetch jobs from Firebase
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'jobs'), (snapshot) => {
+      const jobsData: ProductionJob[] = [];
+      snapshot.forEach((doc) => {
+        jobsData.push(doc.data() as ProductionJob);
+      });
+      setJobs(jobsData);
+    }, (error) => {
+      console.error("Error fetching jobs from Firebase:", error);
+    });
+
+    return () => unsubscribe();
+  }, []);
   
   // Specific View States
   const [viewingOrderJob, setViewingOrderJob] = useState<ProductionJob | null>(null);
@@ -80,20 +97,22 @@ const App: React.FC = () => {
     setCurrentView('tag-print');
   };
 
-  const handleSaveJob = (updatedJob: ProductionJob) => {
-    // Check if it's an update or create (id existence check in existing jobs)
-    const exists = jobs.find(j => j.id === updatedJob.id);
-    const updatedJobs = exists 
-        ? jobs.map(j => j.id === updatedJob.id ? updatedJob : j)
-        : [...jobs, updatedJob]; // Fallback if needed, though usually creating passes through handleCreateJob
-
-    setJobs(updatedJobs);
-    addLog('UPDATE', `แก้ไขงาน ${updatedJob.jobOrder} (${updatedJob.productItem}) - สถานะ: ${updatedJob.status}`, updatedJob.id);
+  const handleSaveJob = async (updatedJob: ProductionJob) => {
+    try {
+      await setDoc(doc(db, 'jobs', updatedJob.id), updatedJob);
+      addLog('UPDATE', `แก้ไขงาน ${updatedJob.jobOrder} (${updatedJob.productItem}) - สถานะ: ${updatedJob.status}`, updatedJob.id);
+    } catch (error) {
+      console.error("Error saving job to Firebase:", error);
+    }
   };
 
-  const handleCreateJob = (newJob: ProductionJob) => {
-    setJobs(prev => [...prev, newJob]);
-    addLog('CREATE', `สร้างงานผลิตใหม่ ${newJob.jobOrder} เครื่อง ${newJob.machineId}`, newJob.id);
+  const handleCreateJob = async (newJob: ProductionJob) => {
+    try {
+      await setDoc(doc(db, 'jobs', newJob.id), newJob);
+      addLog('CREATE', `สร้างงานผลิตใหม่ ${newJob.jobOrder} เครื่อง ${newJob.machineId}`, newJob.id);
+    } catch (error) {
+      console.error("Error creating job in Firebase:", error);
+    }
   };
 
   // If in "Print/Order" detail mode, render that separately for full screen
