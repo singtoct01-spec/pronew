@@ -1,0 +1,489 @@
+
+
+
+
+
+import React, { useState, useRef, useEffect } from 'react';
+import { GoogleGenAI } from "@google/genai";
+import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage } from '../types';
+import { Send, Bot, X, Loader2, CheckCircle, AlertTriangle, Paperclip, Image as ImageIcon, Trash2, BrainCircuit, FileSpreadsheet, MessageSquareText } from 'lucide-react';
+
+interface SmartAssistantProps {
+  isOpen: boolean;
+  onClose: () => void;
+  jobs: ProductionJob[];
+  inventory: InventoryItem[];
+  boms: ProductBOM[];
+  specs: ProductSpec[];
+  machineCapabilities: MachineMoldCapability[];
+  onUpdateJob: (job: ProductionJob) => void;
+  onCreateJob: (job: ProductionJob) => void;
+  messages: AiMessage[];
+  setMessages: React.Dispatch<React.SetStateAction<AiMessage[]>>;
+}
+
+// Define structure for selected file
+type UploadedFile = {
+  file: File;
+  type: 'image' | 'excel';
+  preview?: string; // For images
+  content?: string; // For excel (parsed CSV/JSON string)
+};
+
+export const SmartAssistant: React.FC<SmartAssistantProps> = ({ 
+  isOpen, 
+  onClose, 
+  jobs,
+  inventory,
+  boms,
+  specs,
+  machineCapabilities,
+  onUpdateJob,
+  onCreateJob,
+  messages,
+  setMessages
+}) => {
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isOpen]);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Determine file type
+      if (file.name.match(/\.(xlsx|xls|csv)$/i)) {
+        // Handle Excel
+        await processExcelFile(file);
+      } else if (file.type.startsWith('image/')) {
+        // Handle Image
+        processImageFile(file);
+      } else {
+        alert('รองรับเฉพาะไฟล์รูปภาพ หรือ Excel (.xlsx, .xls) เท่านั้นครับ');
+      }
+    }
+  };
+
+  const processImageFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setSelectedFile({
+          file: file,
+          type: 'image',
+          preview: event.target.result as string
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const processExcelFile = async (file: File) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      // Use global XLSX from CDN
+      const XLSX = (window as any).XLSX;
+      if (!XLSX) {
+        console.error("XLSX library not loaded");
+        return;
+      }
+
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // Convert to CSV for AI consumption (Tokens efficient enough for typical planning sheets)
+      const csvData = XLSX.utils.sheet_to_csv(worksheet);
+      
+      setSelectedFile({
+        file: file,
+        type: 'excel',
+        content: csvData
+      });
+    } catch (error) {
+      console.error("Error reading excel:", error);
+      alert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel");
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault(); 
+        const file = items[i].getAsFile();
+        if (file) processImageFile(file);
+        break; 
+      }
+    }
+  };
+
+  const clearFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() && !selectedFile) return;
+
+    const userMsgText = input;
+    const currentFile = selectedFile;
+
+    // Reset Input State
+    setInput('');
+    clearFile();
+
+    // Add User Message to UI
+    setMessages(prev => [...prev, { 
+      role: 'user', 
+      text: userMsgText, 
+      image: currentFile?.type === 'image' ? currentFile.preview : undefined, // Display image if it is one
+      timestamp: new Date().toISOString()
+    }]);
+
+    setIsLoading(true);
+
+    try {
+      // 1. Prepare "Second Brain" Context
+      const fullSystemContext = {
+        meta: {
+          currentTime: SIMULATED_NOW.toISOString(),
+          appName: "ProPlanner AI",
+        },
+        productionPlan: jobs.map(j => ({
+          id: j.id,
+          machine: j.machineId,
+          order: j.jobOrder,
+          product: j.productItem,
+          status: j.status,
+          totalTarget: j.totalProduction, // ยอดสั่งผลิตทั้งหมด
+          actualProduced: j.actualProduction || 0, // ยอดผลิตได้จริง (Current output)
+          progressPercent: j.totalProduction > 0 ? Math.round(((j.actualProduction || 0) / j.totalProduction) * 100) + '%' : '0%',
+          startDate: j.startDate,
+          endDate: j.endDate,
+          remarks: j.remarks
+        })),
+        inventorySnapshot: inventory.map(i => ({
+          code: i.code,
+          name: i.name,
+          current: i.currentStock,
+          unit: i.unit,
+          status: i.currentStock <= i.minStock ? 'LOW STOCK' : 'OK'
+        })),
+        masterData: {
+            recipesBOM: boms,
+            productSpecifications: specs,
+            machineMoldCapabilities: machineCapabilities
+        }
+      };
+
+      // 2. Initialize Gemini
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
+      // 3. Construct System Prompt (UPGRADED)
+      const systemPrompt = `
+        You are "ProPlanner Brain", a **Senior Production Manager** at KPAC Plastics Factory.
+        You are intelligent, witty, proactive, and deeply understand manufacturing logistics.
+
+        **YOUR PERSONALITY:**
+        - You don't just answer; you **analyze**.
+        - You know that **Machines break**, **Mold changes take time (2hrs)**, and **Color changes take time (1hr)**.
+        - You are keenly aware of **"Starvation"**: Preform machines (Injection) are often SLOWER than Blow machines. If Preform stock is low, the Blow machine MUST stop.
+        - You are helpful, professional, but sharp. You catch mistakes before they happen.
+
+        **YOUR KNOWLEDGE BASE (MASTER DATA):**
+        You have access to the full factory master data (provided in JSON context).
+        - **Product Specs:** You know which Bottle (Jar) uses which Preform. (e.g., A01 uses P45).
+        - **Machine Caps:** You know AB1 runs at ~800/hr, but IP machines might run differently.
+        - **Colors:** You know changing from Black -> White is a nightmare (needs heavy cleaning).
+
+        **CRITICAL RULES:**
+        1. **Preform Check:** If a user asks to plan a Blow Job (e.g., QE307 on AB5), CHECK PREFORM STOCK FIRST. If stock is low, WARN THEM immediately.
+        2. **Breakdowns:** If a machine is 'Maintenance' (like AB7 is now), do not suggest putting jobs on it until repaired.
+        3. **Optimization:** If you see short runs of different colors on one machine, suggest grouping them to save setup time.
+        4. **Realism:** If a plan is impossible (e.g., producing 100k in 1 hour), say it's impossible.
+
+        **DATA INTERPRETATION:**
+        - \`actualProduced\` = Current output so far.
+        - \`totalTarget\` = The goal.
+        - Negative numbers in reports often mean "Stock Deficit" (Owe customers), but in Inventory reports, dashes '-' usually mean 0. Use context.
+
+        **RESPONSE FORMAT:**
+        - Talk naturally in Thai.
+        - Use emojis 🏭 ⚠️ ✅ appropriately.
+        - If an action is clear (like "Update job status"), append the JSON block for Action Proposal.
+        
+        FULL SYSTEM CONTEXT:
+        ${JSON.stringify(fullSystemContext)}
+      `;
+
+      // 4. Prepare Content Parts
+      const contents = [];
+      
+      contents.push({ role: 'user', parts: [{ text: `SYSTEM_INSTRUCTION_AND_CONTEXT: ${systemPrompt}` }] });
+
+      const userParts: any[] = [];
+      
+      // Attach Text
+      let finalPrompt = userMsgText;
+      
+      // Attach Excel Content as Text
+      if (currentFile?.type === 'excel' && currentFile.content) {
+          finalPrompt += `\n\n[USER UPLOADED EXCEL FILE CONTENT (CSV FORMAT)]:\n${currentFile.content}\n[END OF EXCEL FILE] - Please analyze this KPAC Preform report based on the Strict Rules provided.`;
+      }
+      
+      if (finalPrompt) {
+          userParts.push({ text: finalPrompt });
+      }
+
+      // Attach Image Content
+      if (currentFile?.type === 'image' && currentFile.preview) {
+        const base64Data = currentFile.preview.split(',')[1];
+        userParts.push({
+          inlineData: {
+            mimeType: currentFile.file.type,
+            data: base64Data
+          }
+        });
+      }
+      
+      contents.push({ role: 'user', parts: userParts });
+
+      // 5. Call API
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: contents
+      });
+
+      const responseText = response.text;
+      
+      // 6. Parse Response
+      const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+      let actionProposal = null;
+      let displayText = responseText;
+
+      if (jsonMatch) {
+        try {
+          actionProposal = JSON.parse(jsonMatch[1]);
+          displayText = responseText.replace(/```json\n[\s\S]*?\n```/, '').trim();
+        } catch (e) {
+          console.error("Failed to parse AI JSON action", e);
+        }
+      }
+
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: displayText,
+        actionProposal,
+        timestamp: new Date().toISOString()
+      }]);
+
+    } catch (error) {
+      console.error("AI Error:", error);
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: 'ระบบสมองกลขัดข้องชั่วคราว (Network/API Error) กรุณาลองใหม่ครับ',
+        timestamp: new Date().toISOString()
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const executeAction = (proposal: any) => {
+    if (proposal.type === 'UPDATE') {
+      const targetJob = jobs.find(j => 
+        j.jobOrder === proposal.data.jobOrder || 
+        j.id === proposal.data.id || 
+        (j.machineId === proposal.data.machineId && j.productItem === proposal.data.productItem)
+      );
+      
+      if (targetJob) {
+        const updatedJob = { ...targetJob, ...proposal.data };
+        onUpdateJob(updatedJob);
+        setMessages(prev => [...prev, { role: 'model', text: `✅ บันทึกการแก้ไขข้อมูล ${targetJob.jobOrder || targetJob.productItem} เรียบร้อย`, timestamp: new Date().toISOString() }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'model', text: `❌ ไม่พบรายการผลิตที่ตรงกันในระบบครับ`, timestamp: new Date().toISOString() }]);
+      }
+    } else if (proposal.type === 'CREATE') {
+      const newJob: ProductionJob = {
+         id: `new-${Date.now()}`,
+         machineId: proposal.data.machineId || 'Unknown',
+         productItem: proposal.data.productItem || 'New Item',
+         moldCode: proposal.data.moldCode || '-',
+         jobOrder: proposal.data.jobOrder || `AUTO-${Date.now()}`,
+         capacityPerShift: 0,
+         totalProduction: proposal.data.totalProduction || 0,
+         color: '-',
+         startDate: proposal.data.startDate || SIMULATED_NOW.toISOString(),
+         endDate: proposal.data.endDate || SIMULATED_NOW.toISOString(),
+         status: 'Running',
+         ...proposal.data
+      };
+      onCreateJob(newJob);
+      setMessages(prev => [...prev, { role: 'model', text: `✅ สร้างรายการผลิตใหม่ ${newJob.jobOrder} ลงตารางเรียบร้อย`, timestamp: new Date().toISOString() }]);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300 font-kanit">
+      {/* Header */}
+      <div className="p-4 bg-slate-900 text-white flex justify-between items-center shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <BrainCircuit size={24} />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg">ProPlanner Brain</h2>
+            <p className="text-xs text-indigo-200">ระบบอัจฉริยะ & ฐานข้อมูล Master</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+          <X size={24} />
+        </button>
+      </div>
+
+      {/* Chat Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${
+              msg.role === 'user' 
+                ? 'bg-indigo-600 text-white rounded-tr-none' 
+                : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
+            }`}>
+              
+              {/* Image Preview in Chat History */}
+              {msg.image && (
+                <div className="mb-3 rounded-lg overflow-hidden border border-white/20">
+                  <img src={msg.image} alt="User upload" className="w-full h-auto object-cover max-h-48" />
+                </div>
+              )}
+
+              {/* Special rendering if user uploaded Excel but didn't type text (or mixed) */}
+              {msg.text.includes("[USER UPLOADED EXCEL FILE CONTENT") && msg.role === 'user' ? (
+                  <div className="mb-2 flex items-center gap-2 bg-indigo-700/50 p-2 rounded-lg">
+                      <FileSpreadsheet size={20} className="text-white"/>
+                      <span className="text-xs font-mono">แนบไฟล์ Excel แล้ว</span>
+                  </div>
+              ) : null}
+              
+              <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.text.replace(/\[USER UPLOADED EXCEL FILE CONTENT[\s\S]*$/, '(แนบไฟล์ Excel)')}</div>
+              
+              {/* Action Proposal Card */}
+              {msg.actionProposal && (
+                <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="flex items-start gap-2 mb-2">
+                    <AlertTriangle className="text-indigo-600 shrink-0" size={16} />
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                      Action Required: {msg.actionProposal.type}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100 mb-3 font-mono overflow-x-auto max-h-32">
+                    {JSON.stringify(msg.actionProposal.data, null, 2)}
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => executeAction(msg.actionProposal)}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1"
+                    >
+                      <CheckCircle size={14} /> ยืนยัน (Approve)
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        {isLoading && (
+          <div className="flex justify-start">
+             <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none p-4 shadow-sm flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin text-indigo-500" />
+                <span className="text-xs text-slate-500">กำลังประมวลผลข้อมูล...</span>
+             </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div className="p-4 bg-white border-t border-slate-200">
+        
+        {/* File Preview before sending */}
+        {selectedFile && (
+          <div className="mb-3 flex items-center gap-3 bg-slate-100 p-2 rounded-lg border border-slate-200 animate-in slide-in-from-bottom duration-200">
+            <div className="w-12 h-12 rounded bg-white border border-slate-300 overflow-hidden flex-shrink-0 flex items-center justify-center">
+               {selectedFile.type === 'image' ? (
+                   <img src={selectedFile.preview} alt="Preview" className="w-full h-full object-cover" />
+               ) : (
+                   <FileSpreadsheet size={24} className="text-emerald-600" />
+               )}
+            </div>
+            <div className="flex-1 min-w-0">
+               <p className="text-xs font-medium text-slate-700 truncate">{selectedFile.file.name}</p>
+               <p className="text-[10px] text-slate-500">{(selectedFile.file.size / 1024).toFixed(1)} KB</p>
+            </div>
+            <button onClick={clearFile} className="p-1 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {/* File Input Hidden */}
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileSelect} 
+            accept="image/*,.xlsx,.xls,.csv"
+            className="hidden" 
+          />
+          
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-3 rounded-xl transition-colors border border-slate-200"
+            title="แนบรูปภาพ หรือ ไฟล์ Excel"
+            disabled={isLoading}
+          >
+            {selectedFile ? (
+                selectedFile.type === 'image' ? <ImageIcon size={20} className="text-indigo-600"/> : <FileSpreadsheet size={20} className="text-emerald-600"/>
+            ) : <Paperclip size={20} />}
+          </button>
+
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onPaste={handlePaste}
+            placeholder={selectedFile ? "พิมพ์คำสั่ง..." : "ถาม AI เรื่องผลิต, สต็อก, หรือแจ้งปัญหา..."}
+            className="flex-1 px-4 py-3 bg-slate-100 border-0 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-800 placeholder-slate-400"
+            disabled={isLoading}
+          />
+          <button 
+            onClick={handleSend}
+            disabled={isLoading || (!input.trim() && !selectedFile)}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white p-3 rounded-xl transition-colors shadow-lg shadow-indigo-200"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+        <p className="text-[10px] text-center text-slate-400 mt-2 flex items-center justify-center gap-1">
+           <MessageSquareText size={10} /> รองรับการสรุปแชทไลน์ & วิเคราะห์แผน
+        </p>
+      </div>
+    </div>
+  );
+};
