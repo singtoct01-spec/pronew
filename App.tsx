@@ -471,6 +471,7 @@ const App: React.FC = () => {
         machineCapabilities={MACHINE_MOLD_CAPABILITIES}
         formTemplates={formTemplates}
         customKnowledge={customKnowledge}
+        downtimeLogs={downtimeLogs}
         onUpdateJob={handleSaveJob}
         onCreateJob={handleCreateJob}
         onBatchUpsert={handleBatchUpsert}

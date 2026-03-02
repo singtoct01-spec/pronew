@@ -4,8 +4,8 @@
 
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI } from "@google/genai";
-import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage, FormTemplate, CustomKnowledge } from '../types';
+import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
+import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage, FormTemplate, CustomKnowledge, DowntimeLog } from '../types';
 import { Send, Bot, X, Loader2, CheckCircle, AlertTriangle, Paperclip, Image as ImageIcon, Trash2, BrainCircuit, FileSpreadsheet, MessageSquareText, Key } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -19,6 +19,7 @@ interface SmartAssistantProps {
   machineCapabilities: MachineMoldCapability[];
   formTemplates?: FormTemplate[];
   customKnowledge?: CustomKnowledge[];
+  downtimeLogs?: DowntimeLog[];
   onUpdateJob: (job: ProductionJob) => void;
   onCreateJob: (job: ProductionJob) => void;
   onBatchUpsert?: (jobs: ProductionJob[]) => void;
@@ -46,6 +47,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   machineCapabilities,
   formTemplates,
   customKnowledge,
+  downtimeLogs,
   onUpdateJob,
   onCreateJob,
   onBatchUpsert,
@@ -209,7 +211,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             machineMoldCapabilities: machineCapabilities
         },
         savedFormTemplates: formTemplates?.map(f => ({ id: f.id, title: f.title, html: f.html })) || [],
-        customKnowledge: customKnowledge?.map(k => ({ topic: k.topic, content: k.content })) || []
+        customKnowledge: customKnowledge?.map(k => ({ topic: k.topic, content: k.content })) || [],
+        downtimeHistory: downtimeLogs?.map(d => ({ machineId: d.machineId, date: d.date, durationMinutes: d.durationMinutes, category: d.category, reason: d.reason })) || []
       };
 
       // 2. Initialize Gemini
@@ -233,6 +236,12 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         - **Colors:** You know changing from Black -> White is a nightmare (needs heavy cleaning).
         - **Custom Knowledge:** Pay special attention to the \`customKnowledge\` array in the context. This contains specific rules, warnings, or facts added by the user. Always prioritize these custom rules when answering or planning.
 
+        **PREDICTIVE ANALYTICS (FORECASTING):**
+        - You have access to \`downtimeHistory\` and current \`jobs\`.
+        - **Machine Health:** Analyze the downtime history. If a machine (e.g., IP1) has frequent breakdowns or a recent major failure, warn the user that it might need maintenance soon or is at risk of breaking down again if heavily loaded.
+        - **Material Shortage:** Analyze the current running jobs and inventory. If a Blow machine is running fast but the corresponding Injection machine is slow or stopped, calculate when the Preform stock will run out and warn the user (e.g., "วัตถุดิบจะหมดในอีก 5 ชั่วโมง").
+        - Be proactive. If the user asks for a general update, include these predictive insights.
+
         **CRITICAL RULES:**
         1. **Preform Check:** If a user asks to plan a Blow Job (e.g., QE307 on AB5), CHECK PREFORM STOCK FIRST. If stock is low, WARN THEM immediately.
         2. **Breakdowns:** If a machine is 'Maintenance' (like AB7 is now), do not suggest putting jobs on it until repaired.
@@ -244,10 +253,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         - \`totalTarget\` = The goal.
         - Negative numbers in reports often mean "Stock Deficit" (Owe customers), but in Inventory reports, dashes '-' usually mean 0. Use context.
 
-        **RESPONSE FORMAT:**
+        **RESPONSE FORMAT & ACTIONS:**
         - Talk naturally in Thai.
         - Use emojis 🏭 ⚠️ ✅ appropriately.
-        - If an action is clear (like "Update job status", "Create new job", or "Import schedule from image"), append a JSON block for Action Proposal EXACTLY in this format:
+        - **Direct Actions (Function Calling):** If the user asks to "เลื่อนงาน", "อัปเดตสถานะงาน", or "บันทึกเครื่องจักรเสีย", you MUST use the provided tools (Function Calling) to execute the action immediately. Do not return a JSON block for these.
+        - **Other Actions (JSON Block):** For actions that don't have a specific tool (like creating a new job, batch importing schedule, or generating a form), append a JSON block for Action Proposal EXACTLY in this format:
         \`\`\`json
         {
           "type": "BATCH_UPSERT",
@@ -297,9 +307,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         }
         \`\`\`
 
-        **IMAGE EXTRACTION RULES:**
-        - When extracting from images, you MUST extract ALL columns including "ยอดการผลิตได้" (actualProduction), "Cap ต่อกะ" (capacityPerShift), "รหัสแม่พิมพ์" (moldCode), "สี" (color), and "หมายเหตุ" (remarks). Do not leave them out.
-        - If the image is a form template and the user wants to create a form based on it, extract its structure and generate a \`GENERATE_FORM\` action.
+        **IMAGE EXTRACTION & VISION RULES:**
+        - **Data Extraction:** When extracting from images, you MUST extract ALL columns including "ยอดการผลิตได้" (actualProduction), "Cap ต่อกะ" (capacityPerShift), "รหัสแม่พิมพ์" (moldCode), "สี" (color), and "หมายเหตุ" (remarks). Do not leave them out.
+        - **Form Templates:** If the image is a form template and the user wants to create a form based on it, extract its structure and generate a \`GENERATE_FORM\` action.
+        - **Quality Control (Defects):** If the user uploads an image of a defective product (NG/Defect), analyze the visual anomaly (e.g., black spots, short shot, flash, scratches, bubbles). Explain the possible root causes based on plastic injection/blow molding principles, and suggest immediate troubleshooting steps.
+        - **Machine Error Screens:** If the user uploads an image of a machine error screen or alarm, read the error code/message, explain what it means, and suggest how to fix it. If it implies downtime, you can propose a \`LOG_DOWNTIME\` action.
         
         FULL SYSTEM CONTEXT:
         ${JSON.stringify(fullSystemContext)}
@@ -369,25 +381,155 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         }
       }
 
+      // 4.5 Define Tools
+      const rescheduleMachineJobsFunc: FunctionDeclaration = {
+        name: "rescheduleMachineJobs",
+        description: "เลื่อนงานทั้งหมดของเครื่องจักรที่ระบุ ไปยังวันและเวลาใหม่ (เช่น เลื่อนงานของ AB1 ไปพรุ่งนี้)",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            machineId: { type: Type.STRING, description: "รหัสเครื่องจักร เช่น AB1, IP1" },
+            newStartDate: { type: Type.STRING, description: "วันและเวลาเริ่มต้นใหม่ (ISO 8601 format)" }
+          },
+          required: ["machineId", "newStartDate"]
+        }
+      };
+
+      const updateJobStatusFunc: FunctionDeclaration = {
+        name: "updateJobStatus",
+        description: "อัปเดตสถานะของรายการผลิต",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            jobOrder: { type: Type.STRING, description: "หมายเลข Job Order" },
+            status: { type: Type.STRING, description: "สถานะใหม่ เช่น Running, Completed, Pending, Paused" }
+          },
+          required: ["jobOrder", "status"]
+        }
+      };
+
+      const createJobFunc: FunctionDeclaration = {
+        name: "createJob",
+        description: "สร้างรายการผลิตใหม่ (Job Order)",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            jobOrder: { type: Type.STRING, description: "รหัส Job Order (ถ้าไม่ระบุให้สร้างใหม่แบบสุ่ม)" },
+            productCode: { type: Type.STRING, description: "รหัสสินค้า เช่น A01, P45" },
+            machineId: { type: Type.STRING, description: "รหัสเครื่องจักร เช่น AB1, IP1" },
+            targetQuantity: { type: Type.NUMBER, description: "จำนวนที่ต้องการผลิต" },
+            startDate: { type: Type.STRING, description: "วันและเวลาเริ่มต้น (ISO 8601 format)" },
+            endDate: { type: Type.STRING, description: "วันและเวลาสิ้นสุด (ISO 8601 format)" },
+            priority: { type: Type.STRING, description: "ความสำคัญ: High, Medium, Low" }
+          },
+          required: ["productCode", "machineId", "targetQuantity", "startDate", "endDate"]
+        }
+      };
+
+      const logDowntimeFunc: FunctionDeclaration = {
+        name: "logDowntime",
+        description: "บันทึกข้อมูลเครื่องจักรขัดข้อง หรือเวลาสูญเสีย",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            machineId: { type: Type.STRING, description: "รหัสเครื่องจักร" },
+            date: { type: Type.STRING, description: "วันที่เกิดเหตุ (ISO 8601)" },
+            durationMinutes: { type: Type.NUMBER, description: "ระยะเวลาที่เสีย (นาที)" },
+            category: { type: Type.STRING, description: "หมวดหมู่: Breakdown, Setup, Quality, Material, Other" },
+            reason: { type: Type.STRING, description: "สาเหตุ" }
+          },
+          required: ["machineId", "date", "durationMinutes", "category", "reason"]
+        }
+      };
+
       // 5. Call API
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: sanitizedContents
+        model: 'gemini-3.1-pro-preview',
+        contents: sanitizedContents,
+        config: {
+          tools: [{ functionDeclarations: [rescheduleMachineJobsFunc, updateJobStatusFunc, createJobFunc, logDowntimeFunc] }]
+        }
       });
 
-      const responseText = response.text;
+      let responseText = '';
+      try {
+        responseText = response.text || '';
+      } catch (e) {
+        // No text part
+      }
       
       // 6. Parse Response
-      const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
       let actionProposal = null;
       let displayText = responseText;
 
-      if (jsonMatch) {
-        try {
-          actionProposal = JSON.parse(jsonMatch[1]);
-          displayText = responseText.replace(/```json\n[\s\S]*?\n```/, '').trim();
-        } catch (e) {
-          console.error("Failed to parse AI JSON action", e);
+      if (response.functionCalls && response.functionCalls.length > 0) {
+        for (const call of response.functionCalls) {
+          if (call.name === 'rescheduleMachineJobs') {
+            const { machineId, newStartDate } = call.args as any;
+            const machineJobs = jobs.filter(j => j.machineId === machineId).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+            if (machineJobs.length > 0) {
+              const startDiff = new Date(newStartDate).getTime() - new Date(machineJobs[0].startDate).getTime();
+              const updatedJobs = machineJobs.map(job => ({
+                ...job,
+                startDate: new Date(new Date(job.startDate).getTime() + startDiff).toISOString(),
+                endDate: new Date(new Date(job.endDate).getTime() + startDiff).toISOString(),
+              }));
+              if (onBatchUpsert) {
+                onBatchUpsert(updatedJobs);
+              } else {
+                updatedJobs.forEach(j => onUpdateJob(j));
+              }
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เลื่อนงานของเครื่อง ${machineId} ไปเริ่มวันที่ ${new Date(newStartDate).toLocaleString('th-TH')} เรียบร้อยแล้วครับ`;
+            } else {
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงานของเครื่อง ${machineId} ในระบบครับ`;
+            }
+          } else if (call.name === 'updateJobStatus') {
+            const { jobOrder, status } = call.args as any;
+            const targetJob = jobs.find(j => j.jobOrder === jobOrder);
+            if (targetJob) {
+              onUpdateJob({ ...targetJob, status: status as any });
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** อัปเดตสถานะงาน ${jobOrder} เป็น ${status} เรียบร้อยแล้วครับ`;
+            } else {
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
+            }
+          } else if (call.name === 'createJob') {
+            const args = call.args as any;
+            const newJob = {
+              id: `job-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+              jobOrder: args.jobOrder || `JO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+              productItem: args.productCode,
+              machineId: args.machineId,
+              targetQuantity: args.targetQuantity,
+              actualProduced: 0,
+              startDate: args.startDate,
+              endDate: args.endDate,
+              status: 'Pending',
+              priority: args.priority || 'Medium',
+              color: 'Clear',
+              mold: 'Standard'
+            };
+            if (onAddJob) {
+              onAddJob(newJob as any);
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** สร้างรายการผลิต ${newJob.jobOrder} สำหรับสินค้า ${newJob.productItem} บนเครื่อง ${newJob.machineId} เรียบร้อยแล้วครับ`;
+            } else {
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถสร้างรายการผลิตได้ (Missing handler)`;
+            }
+          } else if (call.name === 'logDowntime') {
+             if (onLogDowntime) {
+               onLogDowntime(call.args);
+               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** บันทึกข้อมูลเครื่องจักรขัดข้อง (${(call.args as any).machineId} - ${(call.args as any).reason}) เรียบร้อยแล้วครับ`;
+             }
+          }
+        }
+      } else {
+        const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+        if (jsonMatch) {
+          try {
+            actionProposal = JSON.parse(jsonMatch[1]);
+            displayText = responseText.replace(/```json\n[\s\S]*?\n```/, '').trim();
+          } catch (e) {
+            console.error("Failed to parse AI JSON action", e);
+          }
         }
       }
 
@@ -719,7 +861,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             onPaste={handlePaste}
-            placeholder={selectedFile ? "พิมพ์คำสั่ง..." : "ถาม AI เรื่องผลิต, สต็อก, หรือแจ้งปัญหา..."}
+            placeholder={selectedFile ? "พิมพ์คำสั่ง..." : "ถาม AI เรื่องผลิต, สต็อก, ถ่ายรูปของเสีย/Error..."}
             className="flex-1 px-4 py-3 bg-slate-100 border-0 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-800 placeholder-slate-400"
             disabled={isLoading}
           />
@@ -732,7 +874,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           </button>
         </div>
         <p className="text-[10px] text-center text-slate-400 mt-2 flex items-center justify-center gap-1">
-           <MessageSquareText size={10} /> รองรับการสรุปแชทไลน์ & วิเคราะห์แผน
+           <MessageSquareText size={10} /> รองรับการสรุปแชทไลน์, วิเคราะห์แผน, วิเคราะห์รูปของเสีย/Error, และพยากรณ์แนวโน้ม (Predictive)
         </p>
       </div>
     </div>
