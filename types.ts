@@ -189,6 +189,13 @@ export interface FormTemplate {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CustomKnowledge {
+  id: string;
+  topic: string;
+  content: string;
+  updatedAt: string;
+}
 // ----------------------------------
 
 // Expanded Capabilities for Knowledge Base

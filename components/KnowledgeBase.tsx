@@ -1,11 +1,21 @@
 
 import React, { useState } from 'react';
-import { MACHINE_MOLD_CAPABILITIES, PRODUCT_SPECS, MOCK_BOMS, MOCK_INVENTORY } from '../types';
-import { Search, Database, Disc, Settings, Weight, Package, Layers, Info, Box } from 'lucide-react';
+import { MACHINE_MOLD_CAPABILITIES, PRODUCT_SPECS, MOCK_BOMS, MOCK_INVENTORY, CustomKnowledge } from '../types';
+import { Search, Database, Disc, Settings, Weight, Package, Layers, Info, Box, BookOpen, Plus, Trash2 } from 'lucide-react';
 
-export const KnowledgeBase: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'products' | 'machines' | 'boms' | 'packaging'>('products');
+interface KnowledgeBaseProps {
+  customKnowledge: CustomKnowledge[];
+  onSaveKnowledge: (knowledge: Omit<CustomKnowledge, 'id' | 'updatedAt'>, id?: string) => void;
+  onDeleteKnowledge: (id: string) => void;
+}
+
+export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, onSaveKnowledge, onDeleteKnowledge }) => {
+  const [activeTab, setActiveTab] = useState<'products' | 'machines' | 'boms' | 'packaging' | 'custom'>('products');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [isAddingKnowledge, setIsAddingKnowledge] = useState(false);
+  const [newTopic, setNewTopic] = useState('');
+  const [newContent, setNewContent] = useState('');
 
   const filteredProducts = PRODUCT_SPECS.filter(p => 
     p.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -20,6 +30,19 @@ export const KnowledgeBase: React.FC = () => {
   const filteredBoms = MOCK_BOMS.filter(b => 
     b.productItem.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const filteredCustom = customKnowledge.filter(k => 
+    k.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    k.content.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleSaveCustom = () => {
+    if (!newTopic.trim() || !newContent.trim()) return;
+    onSaveKnowledge({ topic: newTopic, content: newContent });
+    setNewTopic('');
+    setNewContent('');
+    setIsAddingKnowledge(false);
+  };
 
   return (
     <div className="space-y-6 font-kanit">
@@ -62,6 +85,15 @@ export const KnowledgeBase: React.FC = () => {
             เครื่องจักร & แม่พิมพ์
           </div>
         </button>
+        <button 
+          onClick={() => setActiveTab('custom')}
+          className={`pb-3 px-4 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTab === 'custom' ? 'border-brand-500 text-brand-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          <div className="flex items-center gap-2">
+            <BookOpen size={18} />
+            ข้อมูลเพิ่มเติมสำหรับ AI
+          </div>
+        </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -72,18 +104,30 @@ export const KnowledgeBase: React.FC = () => {
                 {activeTab === 'products' ? 'ฐานข้อมูลสินค้า (Master Products)' : 
                  activeTab === 'boms' ? 'สูตรการผลิตมาตรฐาน (Master BOM)' : 
                  activeTab === 'packaging' ? 'มาตรฐานการบรรจุหีบห่อ (Packaging Standard)' :
+                 activeTab === 'custom' ? 'ข้อมูลเพิ่มเติมสำหรับ AI (Custom Knowledge)' :
                  'ฐานข้อมูลเครื่องจักร (Machine Master)'}
               </h2>
            </div>
-           <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="ค้นหาข้อมูล..." 
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full"
-              />
+           <div className="flex items-center gap-3 w-full md:w-auto">
+              {activeTab === 'custom' && (
+                <button 
+                  onClick={() => setIsAddingKnowledge(true)}
+                  className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  <Plus size={16} />
+                  เพิ่มข้อมูล
+                </button>
+              )}
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="ค้นหาข้อมูล..." 
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full"
+                />
+              </div>
            </div>
         </div>
 
@@ -260,8 +304,102 @@ export const KnowledgeBase: React.FC = () => {
               </tbody>
             </table>
           )}
+          {activeTab === 'custom' && (
+            <div className="p-4">
+              {filteredCustom.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredCustom.map((k) => (
+                    <div key={k.id} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col h-full">
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-slate-800 text-lg">{k.topic}</h3>
+                        <button 
+                          onClick={() => {
+                            if(window.confirm('คุณต้องการลบข้อมูลนี้ใช่หรือไม่?')) {
+                              onDeleteKnowledge(k.id);
+                            }
+                          }}
+                          className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <p className="text-sm text-slate-600 flex-1 whitespace-pre-wrap">{k.content}</p>
+                      <div className="mt-4 text-xs text-slate-400 text-right">
+                        อัปเดต: {new Date(k.updatedAt).toLocaleDateString('th-TH')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-12 text-center text-slate-400 italic flex flex-col items-center">
+                  <BookOpen size={48} className="mb-4 opacity-20" />
+                  <p className="text-lg text-slate-500 mb-2">ยังไม่มีข้อมูลเพิ่มเติม</p>
+                  <p className="text-sm">เพิ่มข้อมูลเพื่อให้ AI ช่วยเหลือคุณได้แม่นยำขึ้น เช่น กฎการทำงาน หรือข้อควรระวัง</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Add Knowledge Modal */}
+      {isAddingKnowledge && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <BookOpen size={24} className="text-brand-500" />
+                เพิ่มข้อมูลความรู้ให้ AI
+              </h2>
+              <button 
+                onClick={() => setIsAddingKnowledge(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">หัวข้อ (Topic)</label>
+                <input 
+                  type="text" 
+                  value={newTopic}
+                  onChange={(e) => setNewTopic(e.target.value)}
+                  placeholder="เช่น กฎการเปลี่ยนแม่พิมพ์, ข้อควรระวังเครื่อง IP1"
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">รายละเอียด (Content)</label>
+                <textarea 
+                  value={newContent}
+                  onChange={(e) => setNewContent(e.target.value)}
+                  placeholder="พิมพ์ข้อมูลที่คุณต้องการให้ AI จดจำ..."
+                  rows={8}
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+              <button 
+                onClick={() => setIsAddingKnowledge(false)}
+                className="px-6 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={handleSaveCustom}
+                disabled={!newTopic.trim() || !newContent.trim()}
+                className="px-6 py-2.5 rounded-xl text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                บันทึกข้อมูล
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

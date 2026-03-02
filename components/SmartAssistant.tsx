@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
-import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage, FormTemplate } from '../types';
+import { ProductionJob, SIMULATED_NOW, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability, AiMessage, FormTemplate, CustomKnowledge } from '../types';
 import { Send, Bot, X, Loader2, CheckCircle, AlertTriangle, Paperclip, Image as ImageIcon, Trash2, BrainCircuit, FileSpreadsheet, MessageSquareText, Key } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -18,6 +18,7 @@ interface SmartAssistantProps {
   specs: ProductSpec[];
   machineCapabilities: MachineMoldCapability[];
   formTemplates?: FormTemplate[];
+  customKnowledge?: CustomKnowledge[];
   onUpdateJob: (job: ProductionJob) => void;
   onCreateJob: (job: ProductionJob) => void;
   onBatchUpsert?: (jobs: ProductionJob[]) => void;
@@ -44,6 +45,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   specs,
   machineCapabilities,
   formTemplates,
+  customKnowledge,
   onUpdateJob,
   onCreateJob,
   onBatchUpsert,
@@ -206,7 +208,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             productSpecifications: specs,
             machineMoldCapabilities: machineCapabilities
         },
-        savedFormTemplates: formTemplates?.map(f => ({ id: f.id, title: f.title, html: f.html })) || []
+        savedFormTemplates: formTemplates?.map(f => ({ id: f.id, title: f.title, html: f.html })) || [],
+        customKnowledge: customKnowledge?.map(k => ({ topic: k.topic, content: k.content })) || []
       };
 
       // 2. Initialize Gemini
@@ -223,11 +226,12 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         - You are keenly aware of **"Starvation"**: Preform machines (Injection) are often SLOWER than Blow machines. If Preform stock is low, the Blow machine MUST stop.
         - You are helpful, professional, but sharp. You catch mistakes before they happen.
 
-        **YOUR KNOWLEDGE BASE (MASTER DATA):**
+        **YOUR KNOWLEDGE BASE (MASTER DATA & CUSTOM KNOWLEDGE):**
         You have access to the full factory master data (provided in JSON context).
         - **Product Specs:** You know which Bottle (Jar) uses which Preform. (e.g., A01 uses P45).
         - **Machine Caps:** You know AB1 runs at ~800/hr, but IP machines might run differently.
         - **Colors:** You know changing from Black -> White is a nightmare (needs heavy cleaning).
+        - **Custom Knowledge:** Pay special attention to the \`customKnowledge\` array in the context. This contains specific rules, warnings, or facts added by the user. Always prioritize these custom rules when answering or planning.
 
         **CRITICAL RULES:**
         1. **Preform Check:** If a user asks to plan a Blow Job (e.g., QE307 on AB5), CHECK PREFORM STOCK FIRST. If stock is low, WARN THEM immediately.

@@ -22,7 +22,7 @@ import { ProductionAnalysis } from './components/ProductionAnalysis';
 import { CustomFormView } from './components/CustomFormView';
 import { FormTemplatesView } from './components/FormTemplatesView';
 import { DowntimeLogsView } from './components/DowntimeLogsView';
-import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog } from './types';
+import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge } from './types';
 import { Menu, Sparkles } from 'lucide-react';
 
 export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates';
@@ -83,11 +83,23 @@ const App: React.FC = () => {
       console.error("Error fetching downtime logs from Firebase:", error);
     });
 
+    const unsubscribeCustomKnowledge = onSnapshot(collection(db, 'customKnowledge'), (snapshot) => {
+      const knowledgeData: CustomKnowledge[] = [];
+      snapshot.forEach((doc) => {
+        knowledgeData.push(doc.data() as CustomKnowledge);
+      });
+      knowledgeData.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      setCustomKnowledge(knowledgeData);
+    }, (error) => {
+      console.error("Error fetching custom knowledge from Firebase:", error);
+    });
+
     return () => {
       unsubscribeJobs();
       unsubscribeLogs();
       unsubscribeForms();
       unsubscribeDowntimeLogs();
+      unsubscribeCustomKnowledge();
     };
   }, []);
   
@@ -101,6 +113,7 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
   const [downtimeLogs, setDowntimeLogs] = useState<DowntimeLog[]>([]);
+  const [customKnowledge, setCustomKnowledge] = useState<CustomKnowledge[]>([]);
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([
     { 
       role: 'model', 
@@ -260,6 +273,30 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSaveKnowledge = async (knowledge: Omit<CustomKnowledge, 'id' | 'updatedAt'>, id?: string) => {
+    try {
+      const newKnowledge: CustomKnowledge = {
+        id: id || `know-${Date.now()}`,
+        topic: knowledge.topic,
+        content: knowledge.content,
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, 'customKnowledge', newKnowledge.id), newKnowledge);
+      alert('บันทึกข้อมูลความรู้สำเร็จ');
+    } catch (error) {
+      console.error("Error saving custom knowledge:", error);
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    }
+  };
+
+  const handleDeleteKnowledge = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'customKnowledge', id));
+    } catch (error) {
+      console.error("Error deleting custom knowledge:", error);
+    }
+  };
+
   // If in "Print/Order" detail mode, render that separately for full screen
   if (currentView === 'order-detail' && viewingOrderJob) {
     return <ProductionOrderView job={viewingOrderJob} onBack={() => setCurrentView('plan')} />;
@@ -335,7 +372,7 @@ const App: React.FC = () => {
       case 'inventory':
         return <InventoryView />;
       case 'master-data':
-        return <KnowledgeBase />;
+        return <KnowledgeBase customKnowledge={customKnowledge} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />;
       case 'history':
         return <HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />;
       case 'downtime-logs':
@@ -433,6 +470,7 @@ const App: React.FC = () => {
         specs={PRODUCT_SPECS}
         machineCapabilities={MACHINE_MOLD_CAPABILITIES}
         formTemplates={formTemplates}
+        customKnowledge={customKnowledge}
         onUpdateJob={handleSaveJob}
         onCreateJob={handleCreateJob}
         onBatchUpsert={handleBatchUpsert}
