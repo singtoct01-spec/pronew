@@ -23,7 +23,7 @@ import { CustomFormView } from './components/CustomFormView';
 import { FormTemplatesView } from './components/FormTemplatesView';
 import { DowntimeLogsView } from './components/DowntimeLogsView';
 import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge } from './types';
-import { Menu, Sparkles } from 'lucide-react';
+import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X } from 'lucide-react';
 
 export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates';
 
@@ -137,6 +137,73 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Error saving log to Firebase:", error);
     }
+  };
+
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Real-time Notification System
+  useEffect(() => {
+    const generatedAlerts: any[] = [];
+    const now = new Date();
+
+    // 1. Check Machine Downtime (Simulate "stopped for > 15 mins")
+    downtimeLogs.forEach(log => {
+      const logDate = new Date(log.date);
+      const diffMinutes = (now.getTime() - logDate.getTime()) / (1000 * 60);
+      if (diffMinutes >= 15 && diffMinutes <= 24 * 60) {
+         generatedAlerts.push({
+           id: `dt-${log.id}`,
+           type: 'error',
+           message: `🚨 เครื่อง ${log.machineId} หยุดทำงานเกิน 15 นาทีแล้ว (${log.reason})`,
+           time: logDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+           timestamp: log.date,
+           read: false
+         });
+      }
+    });
+
+    // 2. Check Material Shortage (Simulate "running out in 2 hours")
+    MOCK_INVENTORY.forEach(item => {
+      if (item.currentStock <= item.minStock) {
+        generatedAlerts.push({
+           id: `inv-${item.id}`,
+           type: 'warning',
+           message: `⚠️ วัตถุดิบ ${item.code} (${item.name}) ใกล้จะหมดสต็อก!`,
+           time: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+           timestamp: now.toISOString(),
+           read: false
+        });
+      }
+    });
+
+    // 3. Check Delayed Jobs
+    jobs.filter(j => j.status === 'Delayed').forEach(job => {
+       generatedAlerts.push({
+           id: `delay-${job.id}`,
+           type: 'warning',
+           message: `⚠️ งาน ${job.jobOrder} (เครื่อง ${job.machineId}) ล่าช้ากว่าแผนการผลิต`,
+           time: new Date(job.startDate).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+           timestamp: job.startDate,
+           read: false
+       });
+    });
+
+    setAlerts(prev => {
+      const newAlertList = [...prev];
+      generatedAlerts.forEach(ga => {
+        if (!newAlertList.find(a => a.id === ga.id)) {
+          newAlertList.push(ga);
+        }
+      });
+      return newAlertList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    });
+  }, [jobs, downtimeLogs]);
+
+  const unreadAlertsCount = alerts.filter(a => !a.read).length;
+
+  const markAllAlertsAsRead = () => {
+    setAlerts(alerts.map(a => ({ ...a, read: true })));
   };
 
   const handleEditJob = (job: ProductionJob) => {
@@ -324,10 +391,10 @@ const App: React.FC = () => {
       case 'dashboard':
         return (
           <div className="space-y-6">
-            <DashboardStats data={jobs} />
+            <DashboardStats data={jobs} downtimeLogs={downtimeLogs} />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
-                    <TimelineView jobs={jobs} />
+                    <TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />
                 </div>
                 <div className="lg:col-span-1">
                      <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-full">
@@ -364,7 +431,7 @@ const App: React.FC = () => {
       case 'analysis':
         return <ProductionAnalysis jobs={jobs} />;
       case 'schedule':
-        return <TimelineView jobs={jobs} />;
+        return <TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />;
       case 'list':
         return <JobTable jobs={jobs} onEditJob={handleEditJob} onPrintHandover={handlePrintHandover} onPrintTag={handlePrintTag} />;
       case 'machines':
@@ -397,34 +464,116 @@ const App: React.FC = () => {
       <Sidebar currentView={currentView} onChangeView={setCurrentView} />
 
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 w-full bg-slate-900 text-white z-20 p-4 flex justify-between items-center shadow-md">
-        <span className="font-bold text-lg">ProPlanner</span>
-        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-          <Menu />
-        </button>
+      <div className="md:hidden fixed top-0 w-full bg-slate-900 text-white z-40 p-4 flex justify-between items-center shadow-md">
+        <div className="flex items-center gap-3">
+            <button onClick={() => setMobileMenuOpen(true)} className="p-1 -ml-1 hover:bg-slate-800 rounded-lg transition-colors">
+              <Menu size={24} />
+            </button>
+            <span className="font-bold text-lg tracking-tight">ProPlanner</span>
+        </div>
+        <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+            >
+              <Bell size={20} />
+              {unreadAlertsCount > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900"></span>
+              )}
+            </button>
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="bg-brand-500 hover:bg-brand-600 text-white p-1.5 rounded-lg transition-all shadow-sm"
+            >
+                <Plus size={20} />
+            </button>
+        </div>
       </div>
 
+      {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900 z-10 pt-20 px-4 md:hidden">
-            <div className="flex flex-col space-y-4">
-                 <button onClick={() => { setCurrentView('dashboard'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">ภาพรวม</button>
-                 <button onClick={() => { setCurrentView('plan'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">แผนการผลิต</button>
-                 <button onClick={() => { setCurrentView('analysis'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">วิเคราะห์การผลิต</button>
-                 <button onClick={() => { setCurrentView('machines'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">สถานะเครื่องจักร</button>
-                 <button onClick={() => { setCurrentView('schedule'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">ไทม์ไลน์</button>
-                 <button onClick={() => { setCurrentView('inventory'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">คลังวัตถุดิบ & BOM</button>
-                 <button onClick={() => { setCurrentView('master-data'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">ฐานข้อมูลหลัก</button>
-                 <button onClick={() => { setCurrentView('list'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">รายการงานทั้งหมด</button>
-                 <button onClick={() => { setCurrentView('form-templates'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">แบบฟอร์มเอกสาร</button>
-                 <button onClick={() => { setCurrentView('history'); setMobileMenuOpen(false); }} className="text-white text-lg py-2 border-b border-slate-700">ประวัติการทำงาน</button>
+        <div className="fixed inset-0 z-50 md:hidden flex">
+            {/* Backdrop */}
+            <div 
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+                onClick={() => setMobileMenuOpen(false)}
+            ></div>
+            
+            {/* Drawer */}
+            <div className="relative w-4/5 max-w-sm bg-slate-900 h-full shadow-2xl flex flex-col animate-in slide-in-from-left">
+                <div className="p-5 border-b border-slate-800 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center font-bold text-white">P</div>
+                        <span className="font-bold text-xl text-white tracking-tight">ProPlanner</span>
+                    </div>
+                    <button onClick={() => setMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-1">
+                    {[
+                        { id: 'dashboard', label: 'ภาพรวม', icon: <BarChart3 size={20} /> },
+                        { id: 'plan', label: 'แผนการผลิต', icon: <Calendar size={20} /> },
+                        { id: 'schedule', label: 'ไทม์ไลน์', icon: <Clock size={20} /> },
+                        { id: 'list', label: 'รายการงานทั้งหมด', icon: <FileText size={20} /> },
+                        { id: 'machines', label: 'สถานะเครื่องจักร', icon: <Cpu size={20} /> },
+                        { id: 'inventory', label: 'คลังวัตถุดิบ & BOM', icon: <Package size={20} /> },
+                        { id: 'master-data', label: 'ฐานข้อมูลหลัก', icon: <Settings size={20} /> },
+                        { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
+                        { id: 'history', label: 'ประวัติการทำงาน', icon: <History size={20} /> },
+                    ].map(item => (
+                        <button 
+                            key={item.id}
+                            onClick={() => { setCurrentView(item.id); setMobileMenuOpen(false); }} 
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium ${currentView === item.id ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                        >
+                            {item.icon}
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
             </div>
         </div>
       )}
 
+      {/* Notifications Dropdown (Shared for Mobile & Desktop) */}
+      {showNotifications && (
+        <>
+            <div className="fixed inset-0 z-40 md:hidden" onClick={() => setShowNotifications(false)}></div>
+            <div className="absolute top-16 right-4 md:top-20 md:right-8 w-[calc(100vw-2rem)] md:w-80 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+            <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="font-bold text-slate-700 text-sm">การแจ้งเตือน</h3>
+                {unreadAlertsCount > 0 && (
+                    <button onClick={markAllAlertsAsRead} className="text-xs text-brand-600 hover:text-brand-800 font-medium">อ่านทั้งหมด</button>
+                )}
+            </div>
+            <div className="max-h-[60vh] md:max-h-96 overflow-y-auto">
+                {alerts.length === 0 ? (
+                    <div className="p-6 text-center flex flex-col items-center justify-center text-slate-400">
+                        <Bell size={32} className="mb-2 opacity-20" />
+                        <span className="text-sm">ไม่มีการแจ้งเตือนใหม่</span>
+                    </div>
+                ) : (
+                    alerts.map(alert => (
+                    <div key={alert.id} className={`p-3 border-b border-slate-50 text-sm transition-colors ${alert.read ? 'opacity-60 hover:bg-slate-50' : 'bg-brand-50/50 hover:bg-brand-50'}`}>
+                        <div className="flex justify-between items-start mb-1">
+                            <span className="font-medium text-slate-800 leading-tight">{alert.message}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-1">
+                            <Clock size={10} /> {alert.time}
+                        </div>
+                    </div>
+                    ))
+                )}
+            </div>
+            </div>
+        </>
+      )}
+
       <main className="flex-1 md:ml-64 p-4 md:p-8 pt-20 md:pt-8 overflow-y-auto h-screen relative">
-        <header className="mb-8 flex justify-between items-center print:hidden">
+        <header className="mb-6 md:mb-8 flex justify-between items-center print:hidden">
             <div>
-                <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+                <h1 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">
                     {currentView === 'dashboard' ? 'ภาพรวม (Overview)' : 
                      currentView === 'plan' ? 'แผนการผลิต (Production Plan)' :
                      currentView === 'analysis' ? 'วิเคราะห์การผลิต (Production Analysis)' :
@@ -438,14 +587,24 @@ const App: React.FC = () => {
                      currentView === 'master-data' ? 'ฐานข้อมูลหลัก (Master Data)' :
                      currentView === 'machines' ? 'สถานะเครื่องจักร' : 'ตั้งค่า'}
                 </h1>
-                <p className="text-slate-500 text-sm">ยินดีต้อนรับ ผู้จัดการฝ่ายวางแผนการผลิต</p>
+                <p className="text-slate-500 text-sm hidden md:block">ยินดีต้อนรับ ผู้จัดการฝ่ายวางแผนการผลิต</p>
             </div>
-            <div className="hidden md:block">
+            <div className="hidden md:flex items-center gap-4 relative">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <Bell size={24} />
+                  {unreadAlertsCount > 0 && (
+                    <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </button>
+
                 <button 
                   onClick={() => setIsModalOpen(true)}
-                  className="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-brand-500/20 active:scale-95"
+                  className="bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-brand-500/20 active:scale-95 flex items-center gap-2"
                 >
-                    + เพิ่มรายการผลิตใหม่
+                    <Plus size={18} /> เพิ่มรายการผลิตใหม่
                 </button>
             </div>
         </header>
