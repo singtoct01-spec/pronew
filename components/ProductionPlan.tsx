@@ -1,9 +1,12 @@
 
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ProductionJob, Status, SIMULATED_NOW, MOCK_INVENTORY, MOCK_BOMS, sortMachines } from '../types';
-import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp } from 'lucide-react';
+import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 interface ProductionPlanProps {
   jobs: ProductionJob[];
@@ -18,6 +21,69 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const handleExportExcel = () => {
+    const exportData = jobs.map(job => ({
+      'เครื่องจักร': job.machineId,
+      'เลขที่ใบสั่งผลิต': job.jobOrder,
+      'สินค้า': job.productItem,
+      'แม่พิมพ์': job.moldCode,
+      'สถานะ': job.status,
+      'วันที่เริ่ม': new Date(job.startDate).toLocaleString('th-TH'),
+      'วันที่จบ': new Date(job.endDate).toLocaleString('th-TH'),
+      'เป้าหมาย': job.totalProduction,
+      'ผลิตได้': job.actualProduction || 0,
+      'คงเหลือ': job.totalProduction - (job.actualProduction || 0),
+      'หมายเหตุ': job.remarks || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Production Plan");
+    XLSX.writeFile(wb, `Production_Plan_${new Date().getTime()}.xlsx`);
+  };
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF('landscape');
+    
+    // Add title
+    doc.setFontSize(16);
+    doc.text('Production Plan Report', 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Date: ${new Date().toLocaleString('th-TH')}`, 14, 22);
+
+    const tableColumn = ["Machine", "Job Order", "Product", "Mold", "Status", "Start", "End", "Target", "Actual"];
+    const tableRows = [];
+
+    // Sort jobs by machine for better readability in PDF
+    const sortedJobs = [...jobs].sort((a, b) => a.machineId.localeCompare(b.machineId));
+
+    sortedJobs.forEach(job => {
+      const jobData = [
+        job.machineId,
+        job.jobOrder,
+        job.productItem,
+        job.moldCode,
+        job.status,
+        new Date(job.startDate).toLocaleDateString('th-TH'),
+        new Date(job.endDate).toLocaleDateString('th-TH'),
+        job.totalProduction.toString(),
+        (job.actualProduction || 0).toString()
+      ];
+      tableRows.push(jobData);
+    });
+
+    (doc as any).autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 30,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [71, 85, 105] }
+    });
+
+    doc.save(`Production_Plan_${new Date().getTime()}.pdf`);
+  };
 
   const groupedJobs: { [key: string]: ProductionJob[] } = jobs.reduce((acc, job) => {
     if (!acc[job.machineId]) acc[job.machineId] = [];
@@ -186,10 +252,10 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
              </div>
          </div>
          <div className="flex gap-2 w-full md:w-auto">
-            <button className="flex-1 md:flex-none items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors">
-                <Printer size={16} /> พิมพ์รายงานรวม
+            <button onClick={handleExportPDF} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors">
+                <Printer size={16} /> Export PDF
             </button>
-            <button className="flex-1 md:flex-none items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium shadow-sm transition-colors flex">
+            <button onClick={handleExportExcel} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium shadow-sm transition-colors">
                 <FileDown size={16} /> Export Excel
             </button>
          </div>

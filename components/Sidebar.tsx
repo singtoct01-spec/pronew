@@ -23,6 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
     { id: 'dashboard', label: 'ภาพรวม (Overview)', icon: <LayoutDashboard size={20} /> },
     { id: 'plan', label: 'แผนการผลิต', icon: <ClipboardList size={20} /> },
     { id: 'analysis', label: 'วิเคราะห์การผลิต', icon: <TrendingUp size={20} /> },
+    { id: 'oee', label: 'OEE Dashboard', icon: <Activity size={20} /> },
     { id: 'machines', label: 'สถานะเครื่องจักร', icon: <Activity size={20} /> },
     { id: 'schedule', label: 'ไทม์ไลน์ (Timeline)', icon: <Calendar size={20} /> },
     { id: 'inventory', label: 'คลังวัตถุดิบ & BOM', icon: <PackageSearch size={20} /> },

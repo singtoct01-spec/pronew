@@ -1,7 +1,9 @@
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { ProductionJob } from '../types';
-import { ChevronLeft, Printer, FileText } from 'lucide-react';
+import { ChevronLeft, Printer, FileText, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface DocumentHandoverViewProps {
   jobs: ProductionJob[];
@@ -9,8 +11,38 @@ interface DocumentHandoverViewProps {
 }
 
 export const DocumentHandoverView: React.FC<DocumentHandoverViewProps> = ({ jobs, onBack }) => {
+  const printRef = useRef<HTMLDivElement>(null);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPDF = async () => {
+    if (!printRef.current) return;
+    
+    try {
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2, // Higher resolution
+        useCORS: true,
+        logging: false
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Document_Handover_${new Date().getTime()}.pdf`);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
+    }
   };
 
   const currentDate = new Date();
@@ -20,23 +52,31 @@ export const DocumentHandoverView: React.FC<DocumentHandoverViewProps> = ({ jobs
   return (
     <div className="bg-slate-100 min-h-screen p-4 md:p-8 font-sans">
       {/* Control Header */}
-      <div className="max-w-[210mm] mx-auto mb-6 flex justify-between items-center print:hidden">
+      <div className="max-w-[210mm] mx-auto mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
         <button 
           onClick={onBack}
           className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors bg-white px-4 py-2 rounded-lg shadow-sm"
         >
           <ChevronLeft size={20} /> ย้อนกลับ
         </button>
-        <button 
-          onClick={handlePrint}
-          className="flex items-center gap-2 px-6 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 shadow-md transition-colors"
-        >
-          <Printer size={18} /> พิมพ์ใบนำส่ง
-        </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button 
+            onClick={handleExportPDF}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-md transition-colors"
+          >
+            <Download size={18} /> Export PDF
+          </button>
+          <button 
+            onClick={handlePrint}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 shadow-md transition-colors"
+          >
+            <Printer size={18} /> พิมพ์ใบนำส่ง
+          </button>
+        </div>
       </div>
 
       {/* A4 Paper */}
-      <div className="max-w-[210mm] mx-auto bg-white shadow-xl print:shadow-none print:border-none min-h-[297mm] p-[15mm] relative text-black">
+      <div ref={printRef} className="max-w-[210mm] mx-auto bg-white shadow-xl print:shadow-none print:border-none min-h-[297mm] p-[15mm] relative text-black">
         
         {/* Header */}
         <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-start">

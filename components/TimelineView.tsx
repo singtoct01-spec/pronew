@@ -53,7 +53,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
     return { startDate: start, endDate: end, totalDays: daysCount, days: dayArray };
   }, [jobs]);
 
-  const machines = Array.from(new Set(jobs.map(j => j.machineId))).sort((a: string, b: string) => {
+  const machines = Array.from(new Set(jobs.map(j => j.machineId))) as string[];
+  machines.sort((a, b) => {
       return a.localeCompare(b, undefined, { numeric: true });
   });
 

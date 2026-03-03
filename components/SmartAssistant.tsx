@@ -508,8 +508,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
               color: 'Clear',
               mold: 'Standard'
             };
-            if (onAddJob) {
-              onAddJob(newJob as any);
+            if (onCreateJob) {
+              onCreateJob(newJob as any);
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** สร้างรายการผลิต ${newJob.jobOrder} สำหรับสินค้า ${newJob.productItem} บนเครื่อง ${newJob.machineId} เรียบร้อยแล้วครับ`;
             } else {
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถสร้างรายการผลิตได้ (Missing handler)`;

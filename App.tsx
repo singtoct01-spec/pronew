@@ -19,6 +19,7 @@ import { InventoryView } from './components/InventoryView';
 import { HistoryLog } from './components/HistoryLog';
 import { KnowledgeBase } from './components/KnowledgeBase';
 import { ProductionAnalysis } from './components/ProductionAnalysis';
+import { OEEDashboard } from './components/OEEDashboard';
 import { CustomFormView } from './components/CustomFormView';
 import { FormTemplatesView } from './components/FormTemplatesView';
 import { DowntimeLogsView } from './components/DowntimeLogsView';
@@ -430,6 +431,8 @@ const App: React.FC = () => {
         return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} />;
       case 'analysis':
         return <ProductionAnalysis jobs={jobs} />;
+      case 'oee':
+        return <OEEDashboard jobs={jobs} downtimeLogs={downtimeLogs} machineCapabilities={MACHINE_MOLD_CAPABILITIES} />;
       case 'schedule':
         return <TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />;
       case 'list':
