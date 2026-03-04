@@ -22,6 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
   const menuItems = [
     { id: 'dashboard', label: 'ภาพรวม (Overview)', icon: <LayoutDashboard size={20} /> },
     { id: 'plan', label: 'แผนการผลิต', icon: <ClipboardList size={20} /> },
+    { id: 'import-plan', label: 'นำเข้าแผนผลิต (Excel)', icon: <FileText size={20} /> },
     { id: 'analysis', label: 'วิเคราะห์การผลิต', icon: <TrendingUp size={20} /> },
     { id: 'oee', label: 'OEE Dashboard', icon: <Activity size={20} /> },
     { id: 'machines', label: 'สถานะเครื่องจักร', icon: <Activity size={20} /> },

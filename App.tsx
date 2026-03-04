@@ -24,6 +24,7 @@ import { OEEDashboard } from './components/OEEDashboard';
 import { CustomFormView } from './components/CustomFormView';
 import { FormTemplatesView } from './components/FormTemplatesView';
 import { DowntimeLogsView } from './components/DowntimeLogsView';
+import { GoogleSheetsImportModal } from './components/GoogleSheetsImportModal';
 import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM } from './types';
 import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X } from 'lucide-react';
 
@@ -38,6 +39,7 @@ const App: React.FC = () => {
   const [inventory, setInventory] = useState(MOCK_INVENTORY);
   const [boms, setBoms] = useState(MOCK_BOMS);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportPlanModalOpen, setIsImportPlanModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   
@@ -724,9 +726,20 @@ const App: React.FC = () => {
     }
   };
 
+  const handleViewChange = (view: string) => {
+    if (view === 'import-plan') {
+      setIsImportPlanModalOpen(true);
+      if (currentView !== 'plan') {
+        setCurrentView('plan');
+      }
+    } else {
+      setCurrentView(view);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex font-kanit">
-      <Sidebar currentView={currentView} onChangeView={setCurrentView} />
+      <Sidebar currentView={currentView} onChangeView={handleViewChange} />
 
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 w-full bg-slate-900 text-white z-40 p-4 flex justify-between items-center shadow-md">
@@ -779,6 +792,7 @@ const App: React.FC = () => {
                     {[
                         { id: 'dashboard', label: 'ภาพรวม', icon: <BarChart3 size={20} /> },
                         { id: 'plan', label: 'แผนการผลิต', icon: <Calendar size={20} /> },
+                        { id: 'import-plan', label: 'นำเข้าแผนผลิต (Excel)', icon: <FileText size={20} /> },
                         { id: 'schedule', label: 'ไทม์ไลน์', icon: <Clock size={20} /> },
                         { id: 'list', label: 'รายการงานทั้งหมด', icon: <FileText size={20} /> },
                         { id: 'machines', label: 'สถานะเครื่องจักร', icon: <Cpu size={20} /> },
@@ -789,7 +803,7 @@ const App: React.FC = () => {
                     ].map(item => (
                         <button 
                             key={item.id}
-                            onClick={() => { setCurrentView(item.id); setMobileMenuOpen(false); }} 
+                            onClick={() => { handleViewChange(item.id); setMobileMenuOpen(false); }} 
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium ${currentView === item.id ? 'bg-brand-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
                         >
                             {item.icon}
@@ -910,6 +924,14 @@ const App: React.FC = () => {
         onClose={() => { setIsModalOpen(false); setEditingJob(null); }} 
         job={editingJob} 
         onSave={handleSaveJob} 
+      />
+
+      <GoogleSheetsImportModal 
+        isOpen={isImportPlanModalOpen} 
+        onClose={() => setIsImportPlanModalOpen(false)} 
+        onImport={(importedJobs) => {
+          handleImportJobs(importedJobs);
+        }}
       />
     </div>
   );
