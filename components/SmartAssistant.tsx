@@ -281,8 +281,19 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         \`\`\`
         (Use "type": "UPDATE" or "CREATE" for single actions, or "BATCH_UPSERT" for multiple jobs. For BATCH_UPSERT, the system will update existing jobs by jobOrder, or create them if they don't exist.)
         
-        - If the user asks you to create a form, document, or tag (especially if they upload an image of a template and ask you to use it), you can generate a custom HTML template for it. Use Tailwind CSS classes for styling. Return a JSON action with \`type: 'GENERATE_FORM'\`, \`html: '<div class=\"...\">...</div>'\`, and \`title: 'Form Title'\`. The HTML should be a complete, printable document layout. You can use data from the current jobs if the user specifies.
-        - If the user asks to use an existing form template, you can refer to the \`savedFormTemplates\` in the context. You can generate a new form by taking the \`html\` of the saved template and modifying it to insert the requested data (e.g., job details, inventory data). Return a JSON action with \`type: 'GENERATE_FORM'\`, the modified \`html\`, and a new \`title\`.
+        **FORM GENERATION (EXCEL STYLE) - CRITICAL INSTRUCTIONS:**
+        - **"Did you see my form?":** If the user asks if you've seen their form, CHECK \`savedFormTemplates\` in the context FIRST. If you find one, acknowledge it by name. If they just uploaded an image, acknowledge receiving the image.
+        - **Exact Replication (The "Photocopier" Rule):** When the user uploads an image of a form or asks to replicate a document, your goal is **100% VISUAL FIDELITY**.
+          - **Do NOT** summarize or "improve" the layout.
+          - **Do NOT** use modern UI cards.
+          - **MUST** use the \`excel-like-content\` wrapper.
+          - **MUST** replicate every column, every merged cell, every header exactly as shown in the image or described.
+          - **Fonts:** Use \`font-family: 'Sarabun', sans-serif;\` for Thai documents.
+          - **Borders:** Use \`border: 1px solid #000;\` for all cells. No soft gray borders.
+        - **Confirmation:** Before generating the HTML, briefly describe what you "see" to reassure the user (e.g., "ผมเห็นเอกสาร 'ใบสั่งผลิต' ที่มี 5 คอลัมน์: ลำดับ, รายการ, จำนวน... กำลังสร้างแบบฟอร์มให้เหมือนเป๊ะครับ").
+        - **Action:** Return a JSON action with \`type: 'GENERATE_FORM'\`, \`html: '<div class=\"excel-like-content\">...</div>'\`, and \`title: 'Form Title'\`.
+        
+        - If the user asks to use an existing form template, refer to \`savedFormTemplates\`. Generate a new form by taking the saved \`html\` and modifying it to insert the requested data.
         
         - If the user reports a machine breakdown, setup time, or any downtime (e.g., from a LINE chat message), extract the details and return a JSON action with \`type: 'LOG_DOWNTIME'\`.
         \`\`\`json
@@ -322,8 +333,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       
       contents.push({ role: 'user', parts: [{ text: `SYSTEM_INSTRUCTION_AND_CONTEXT: ${systemPrompt}` }] });
 
-      // Add conversation history (limit to last 10 messages to save tokens and avoid context overflow)
-      const historyMessages = messages.slice(-10);
+      // Add conversation history (limit to last 100 messages to utilize Gemini's large context window)
+      const historyMessages = messages.slice(-100);
       for (const msg of historyMessages) {
         const parts: any[] = [{ text: msg.text }];
         if (msg.image) {

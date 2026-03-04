@@ -25,14 +25,18 @@ export interface InventoryItem {
   minStock: number;
   maxStock: number;
   remarks?: string;
+  location?: string;
+  lastUpdated?: string;
+  group?: string;
 }
 
 export interface ProductBOM {
+  id?: string;
   productItem: string; 
   materials: {
     inventoryItemId: string;
     qtyPerUnit: number; 
-    unitType: 'pcs' | 'kg';
+    unitType: 'pcs' | 'kg' | string;
   }[];
 }
 

@@ -109,7 +109,7 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onReve
 
       {activeTab === 'ai' && (
         <div className="p-4 bg-slate-50 min-h-[400px] max-h-[600px] overflow-y-auto space-y-4">
-            {aiMessages.length > 1 ? aiMessages.slice(1).map((msg, idx) => ( // Skip initial greeting
+            {aiMessages.length > 0 ? aiMessages.map((msg, idx) => (
                 <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     {msg.role === 'model' && (
                         <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white shrink-0 mt-1">
@@ -124,7 +124,7 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onReve
                     }`}>
                          {/* Header Info */}
                          <div className="flex items-center gap-2 mb-1 opacity-50 text-[10px]">
-                            {msg.role === 'user' ? 'คุณ' : 'ProPlanner Brain'} • {new Date(msg.timestamp).toLocaleTimeString('th-TH')}
+                            {msg.role === 'user' ? 'คุณ' : 'ProPlanner Brain'} • {new Date(msg.timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
                          </div>
 
                          {/* Image */}

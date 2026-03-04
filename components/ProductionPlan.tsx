@@ -3,19 +3,23 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProductionJob, Status, SIMULATED_NOW, MOCK_INVENTORY, MOCK_BOMS, sortMachines } from '../types';
-import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download } from 'lucide-react';
+import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download, Upload } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { GoogleSheetsImportModal } from './GoogleSheetsImportModal';
 
 interface ProductionPlanProps {
   jobs: ProductionJob[];
   onEditJob: (job: ProductionJob) => void;
   onViewOrder: (job: ProductionJob) => void;
+  onImportJobs?: (jobs: Partial<ProductionJob>[]) => void;
+  onPrintPlan?: () => void;
 }
 
-export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob, onViewOrder }) => {
+export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob, onViewOrder, onImportJobs, onPrintPlan }) => {
   const [now, setNow] = useState(new Date());
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -251,15 +255,31 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
                 </div>
              </div>
          </div>
-         <div className="flex gap-2 w-full md:w-auto">
+         <div className="flex gap-2 w-full md:w-auto flex-wrap justify-end">
+            <button onClick={() => setIsImportModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 border border-blue-700 rounded-lg text-white hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors">
+                <Upload size={16} /> นำเข้าข้อมูล (Import)
+            </button>
+            <button onClick={onPrintPlan} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 border border-indigo-700 rounded-lg text-white hover:bg-indigo-700 text-sm font-medium shadow-sm transition-colors">
+                <Printer size={16} /> พิมพ์แผน (PL-FM-001)
+            </button>
             <button onClick={handleExportPDF} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors">
-                <Printer size={16} /> Export PDF
+                <FileDown size={16} /> Export PDF
             </button>
             <button onClick={handleExportExcel} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium shadow-sm transition-colors">
                 <FileDown size={16} /> Export Excel
             </button>
          </div>
       </div>
+
+      <GoogleSheetsImportModal 
+        isOpen={isImportModalOpen} 
+        onClose={() => setIsImportModalOpen(false)} 
+        onImport={(importedJobs) => {
+          if (onImportJobs) {
+            onImportJobs(importedJobs);
+          }
+        }}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
          {/* Stats Cards ... (Keep existing) */}

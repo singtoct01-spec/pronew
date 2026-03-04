@@ -1,8 +1,8 @@
 
 
 
-import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useRef } from 'react';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, orderBy, getDocs, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { Sidebar } from './components/Sidebar';
 import { DashboardStats } from './components/DashboardStats';
@@ -10,11 +10,12 @@ import { JobTable } from './components/JobTable';
 import { TimelineView } from './components/TimelineView';
 import { MachineGrid } from './components/MachineGrid';
 import { ProductionPlan } from './components/ProductionPlan';
+import { ProductionPlanPrint } from './components/ProductionPlanPrint';
 import { EditJobModal } from './components/EditJobModal';
 import { SmartAssistant } from './components/SmartAssistant';
-import { ProductionOrderView } from './components/ProductionOrderView';
+import { ProductionOrderPrint } from './components/ProductionOrderPrint';
 import { DocumentHandoverView } from './components/DocumentHandoverView';
-import { ProductTagView } from './components/ProductTagView';
+import { ProductTagPrint } from './components/ProductTagPrint';
 import { InventoryView } from './components/InventoryView';
 import { HistoryLog } from './components/HistoryLog';
 import { KnowledgeBase } from './components/KnowledgeBase';
@@ -23,10 +24,10 @@ import { OEEDashboard } from './components/OEEDashboard';
 import { CustomFormView } from './components/CustomFormView';
 import { FormTemplatesView } from './components/FormTemplatesView';
 import { DowntimeLogsView } from './components/DowntimeLogsView';
-import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge } from './types';
+import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM } from './types';
 import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X } from 'lucide-react';
 
-export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates';
+export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -34,6 +35,8 @@ const App: React.FC = () => {
   
   // State for data management
   const [jobs, setJobs] = useState<ProductionJob[]>([]);
+  const [inventory, setInventory] = useState(MOCK_INVENTORY);
+  const [boms, setBoms] = useState(MOCK_BOMS);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
@@ -95,12 +98,38 @@ const App: React.FC = () => {
       console.error("Error fetching custom knowledge from Firebase:", error);
     });
 
+    const unsubscribeInventory = onSnapshot(collection(db, 'inventory'), (snapshot) => {
+      if (!snapshot.empty) {
+        const inventoryData: any[] = [];
+        snapshot.forEach((doc) => {
+          inventoryData.push(doc.data());
+        });
+        setInventory(inventoryData as any);
+      }
+    }, (error) => {
+      console.error("Error fetching inventory from Firebase:", error);
+    });
+
+    const unsubscribeBoms = onSnapshot(collection(db, 'boms'), (snapshot) => {
+      if (!snapshot.empty) {
+        const bomsData: any[] = [];
+        snapshot.forEach((doc) => {
+          bomsData.push(doc.data());
+        });
+        setBoms(bomsData as any);
+      }
+    }, (error) => {
+      console.error("Error fetching boms from Firebase:", error);
+    });
+
     return () => {
       unsubscribeJobs();
       unsubscribeLogs();
       unsubscribeForms();
       unsubscribeDowntimeLogs();
       unsubscribeCustomKnowledge();
+      unsubscribeInventory();
+      unsubscribeBoms();
     };
   }, []);
   
@@ -115,6 +144,7 @@ const App: React.FC = () => {
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
   const [downtimeLogs, setDowntimeLogs] = useState<DowntimeLog[]>([]);
   const [customKnowledge, setCustomKnowledge] = useState<CustomKnowledge[]>([]);
+  
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([
     { 
       role: 'model', 
@@ -122,6 +152,71 @@ const App: React.FC = () => {
       timestamp: new Date().toISOString()
     }
   ]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const savedCountRef = useRef(1); // Start at 1 because of the initial message
+
+  // Load Chat History (Last 14 Days)
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      try {
+        const fourteenDaysAgo = new Date();
+        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+        
+        const q = query(
+          collection(db, 'chat_history'),
+          where('timestamp', '>=', fourteenDaysAgo.toISOString()),
+          orderBy('timestamp', 'asc')
+        );
+
+        const querySnapshot = await getDocs(q);
+        const historyMessages: AiMessage[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          historyMessages.push(doc.data() as AiMessage);
+        });
+
+        if (historyMessages.length > 0) {
+          setAiMessages(historyMessages);
+          savedCountRef.current = historyMessages.length;
+        } else {
+          // Keep default message, but mark it as unsaved if we want to save it? 
+          // Actually, let's just leave the default message and let the save effect handle it if we want.
+          // But to avoid duplicating the default message every time, we might want to check.
+          // For simplicity, if history is empty, we start fresh with the default message.
+          savedCountRef.current = 1; 
+        }
+        setHistoryLoaded(true);
+      } catch (error) {
+        console.error("Error loading chat history:", error);
+        setHistoryLoaded(true); // Proceed anyway
+      }
+    };
+
+    loadChatHistory();
+  }, []);
+
+  // Save New Chat Messages
+  useEffect(() => {
+    if (!historyLoaded) return;
+
+    const saveNewMessages = async () => {
+      if (aiMessages.length > savedCountRef.current) {
+        const newMessages = aiMessages.slice(savedCountRef.current);
+        
+        for (const msg of newMessages) {
+          try {
+            await addDoc(collection(db, 'chat_history'), msg);
+          } catch (error) {
+            console.error("Error saving chat message:", error);
+          }
+        }
+        
+        savedCountRef.current = aiMessages.length;
+      }
+    };
+
+    saveNewMessages();
+  }, [aiMessages, historyLoaded]);
 
   const addLog = async (action: AuditLog['action'], details: string, targetId?: string, currentJobsSnapshot?: ProductionJob[]) => {
     const newLog: AuditLog = {
@@ -367,7 +462,11 @@ const App: React.FC = () => {
 
   // If in "Print/Order" detail mode, render that separately for full screen
   if (currentView === 'order-detail' && viewingOrderJob) {
-    return <ProductionOrderView job={viewingOrderJob} onBack={() => setCurrentView('plan')} />;
+    return <ProductionOrderPrint job={viewingOrderJob} onBack={() => setCurrentView('plan')} />;
+  }
+
+  if (currentView === 'plan-print') {
+    return <ProductionPlanPrint jobs={jobs} onBack={() => setCurrentView('plan')} />;
   }
 
   if (currentView === 'handover' && handoverJobs.length > 0) {
@@ -375,7 +474,7 @@ const App: React.FC = () => {
   }
 
   if (currentView === 'tag-print' && tagJob) {
-    return <ProductTagView job={tagJob} onBack={() => setCurrentView('list')} />;
+    return <ProductTagPrint job={tagJob} onBack={() => setCurrentView('list')} />;
   }
 
   if (currentView === 'custom-form' && customForm) {
@@ -386,6 +485,153 @@ const App: React.FC = () => {
       onSave={!customForm.id ? () => handleSaveFormTemplate(customForm.html, customForm.title) : undefined}
     />;
   }
+
+  const handleImportJobs = (importedJobs: Partial<ProductionJob>[]) => {
+    const newJobs = importedJobs.map(job => ({
+      ...job,
+      id: job.id || `IMP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      status: job.status || 'Planned',
+      startDate: job.startDate || new Date().toISOString(),
+      endDate: job.endDate || new Date(Date.now() + 86400000).toISOString(),
+      actualProduction: 0,
+    })) as ProductionJob[];
+    
+    setJobs([...jobs, ...newJobs]);
+  };
+
+  const handleImportInventory = async (importedItems: any[]) => {
+    try {
+      // Create a batch to write all imported items to Firebase
+      for (const item of importedItems) {
+        const itemRef = doc(db, 'inventory', item.id);
+        await setDoc(itemRef, item);
+      }
+      
+      // Also log the action
+      const logRef = collection(db, 'logs');
+      await addDoc(logRef, {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'นำเข้าข้อมูลสินค้าคงคลัง',
+        details: `นำเข้าข้อมูลจำนวน ${importedItems.length} รายการผ่าน Excel`,
+        user: 'System Admin'
+      });
+      
+      alert(`นำเข้าข้อมูลสำเร็จ ${importedItems.length} รายการ`);
+    } catch (error) {
+      console.error("Error importing inventory:", error);
+      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล");
+    }
+  };
+
+  const handleAddInventory = async (item: Omit<InventoryItem, 'id'>) => {
+    try {
+      const newItemRef = doc(collection(db, 'inventory'));
+      const newItem = { ...item, id: newItemRef.id };
+      await setDoc(newItemRef, newItem);
+      
+      await addDoc(collection(db, 'logs'), {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'เพิ่มรายการสินค้า',
+        details: `เพิ่มรหัส ${item.code} - ${item.name}`,
+        user: 'System Admin'
+      });
+    } catch (error) {
+      console.error("Error adding inventory:", error);
+      alert("เกิดข้อผิดพลาดในการเพิ่มข้อมูล");
+    }
+  };
+
+  const handleUpdateInventory = async (item: InventoryItem) => {
+    try {
+      const itemRef = doc(db, 'inventory', item.id);
+      await setDoc(itemRef, item, { merge: true });
+      
+      await addDoc(collection(db, 'logs'), {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'แก้ไขรายการสินค้า',
+        details: `แก้ไขรหัส ${item.code}`,
+        user: 'System Admin'
+      });
+    } catch (error) {
+      console.error("Error updating inventory:", error);
+      alert("เกิดข้อผิดพลาดในการแก้ไขข้อมูล");
+    }
+  };
+
+  const handleDeleteInventory = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'inventory', id));
+      
+      await addDoc(collection(db, 'logs'), {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'ลบรายการสินค้า',
+        details: `ลบรายการ ID: ${id}`,
+        user: 'System Admin'
+      });
+    } catch (error) {
+      console.error("Error deleting inventory:", error);
+      alert("เกิดข้อผิดพลาดในการลบข้อมูล");
+    }
+  };
+
+  const handleAddBom = async (bom: Omit<ProductBOM, 'id'>) => {
+    try {
+      const newBomRef = doc(collection(db, 'boms'));
+      const newBom = { ...bom, id: newBomRef.id };
+      await setDoc(newBomRef, newBom);
+      
+      await addDoc(collection(db, 'logs'), {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'เพิ่มสูตรการผลิต',
+        details: `เพิ่มสูตรสำหรับ ${bom.productItem}`,
+        user: 'System Admin'
+      });
+    } catch (error) {
+      console.error("Error adding BOM:", error);
+      alert("เกิดข้อผิดพลาดในการเพิ่มสูตรการผลิต");
+    }
+  };
+
+  const handleUpdateBom = async (bom: ProductBOM) => {
+    if (!bom.id) return;
+    try {
+      const bomRef = doc(db, 'boms', bom.id);
+      await setDoc(bomRef, bom, { merge: true });
+      
+      await addDoc(collection(db, 'logs'), {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'แก้ไขสูตรการผลิต',
+        details: `แก้ไขสูตรสำหรับ ${bom.productItem}`,
+        user: 'System Admin'
+      });
+    } catch (error) {
+      console.error("Error updating BOM:", error);
+      alert("เกิดข้อผิดพลาดในการแก้ไขสูตรการผลิต");
+    }
+  };
+
+  const handleDeleteBom = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'boms', id));
+      
+      await addDoc(collection(db, 'logs'), {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        action: 'ลบสูตรการผลิต',
+        details: `ลบสูตร ID: ${id}`,
+        user: 'System Admin'
+      });
+    } catch (error) {
+      console.error("Error deleting BOM:", error);
+      alert("เกิดข้อผิดพลาดในการลบสูตรการผลิต");
+    }
+  };
 
   const renderContent = () => {
     switch (currentView) {
@@ -428,7 +674,7 @@ const App: React.FC = () => {
           </div>
         );
       case 'plan':
-        return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} />;
+        return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onImportJobs={handleImportJobs} onPrintPlan={() => setCurrentView('plan-print')} />;
       case 'analysis':
         return <ProductionAnalysis jobs={jobs} />;
       case 'oee':
@@ -440,7 +686,17 @@ const App: React.FC = () => {
       case 'machines':
         return <MachineGrid jobs={jobs} onEditJob={handleEditJob} />;
       case 'inventory':
-        return <InventoryView />;
+        return <InventoryView 
+          inventory={inventory} 
+          boms={boms}
+          onImportInventory={handleImportInventory} 
+          onAddInventory={handleAddInventory}
+          onUpdateInventory={handleUpdateInventory}
+          onDeleteInventory={handleDeleteInventory}
+          onAddBom={handleAddBom}
+          onUpdateBom={handleUpdateBom}
+          onDeleteBom={handleDeleteBom}
+        />;
       case 'master-data':
         return <KnowledgeBase customKnowledge={customKnowledge} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />;
       case 'history':
@@ -457,8 +713,14 @@ const App: React.FC = () => {
           onDeleteForm={handleDeleteFormTemplate}
           onSaveForm={handleSaveFormTemplate}
         />;
+      case 'order-detail':
+        return viewingOrderJob ? <ProductionOrderPrint job={viewingOrderJob} onBack={() => setCurrentView('plan')} /> : null;
+      case 'handover':
+        return <DocumentHandoverView jobs={handoverJobs} onBack={() => setCurrentView('list')} />;
+      case 'tag-print':
+        return tagJob ? <ProductTagPrint job={tagJob} onBack={() => setCurrentView('list')} /> : null;
       default:
-        return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} />;
+        return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onImportJobs={handleImportJobs} />;
     }
   };
 
