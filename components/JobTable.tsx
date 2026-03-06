@@ -3,16 +3,17 @@
 
 import React, { useState } from 'react';
 import { ProductionJob, Status, MOCK_INVENTORY, MOCK_BOMS } from '../types';
-import { Search, Filter, AlertTriangle, Pencil, Flame, Zap, PauseCircle, CalendarClock, FileText, CheckSquare, Square, Printer, Tag, AlertOctagon } from 'lucide-react';
+import { Search, Filter, AlertTriangle, Pencil, Flame, Zap, PauseCircle, CalendarClock, FileText, CheckSquare, Square, Printer, Tag, AlertOctagon, Edit2 } from 'lucide-react';
 
 interface JobTableProps {
   jobs: ProductionJob[];
   onEditJob: (job: ProductionJob) => void;
   onPrintHandover?: (selectedJobs: ProductionJob[]) => void;
   onPrintTag?: (job: ProductionJob) => void;
+  onViewOrder?: (job: ProductionJob) => void;
 }
 
-export const JobTable: React.FC<JobTableProps> = ({ jobs, onEditJob, onPrintHandover, onPrintTag }) => {
+export const JobTable: React.FC<JobTableProps> = ({ jobs, onEditJob, onPrintHandover, onPrintTag, onViewOrder }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
@@ -232,6 +233,15 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, onEditJob, onPrintHand
                 <td className="px-4 py-4 text-slate-600 whitespace-nowrap text-xs">{formatDate(job.endDate)}</td>
                 <td className="px-4 py-4 text-right">
                   <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {onViewOrder && (
+                        <button 
+                            onClick={() => onViewOrder(job)}
+                            className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="ดูใบสั่งผลิต"
+                        >
+                            <FileText size={16} />
+                        </button>
+                    )}
                     <button 
                         onClick={() => onPrintTag && onPrintTag(job)}
                         className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -244,7 +254,7 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, onEditJob, onPrintHand
                         className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
                         title="แก้ไข"
                     >
-                        <Pencil size={16} />
+                        <Edit2 size={16} />
                     </button>
                   </div>
                 </td>

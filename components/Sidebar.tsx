@@ -2,14 +2,16 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Table, Calendar, Activity, ClipboardList, PackageSearch, History, Clock, Database, TrendingUp, FileText, AlertOctagon } from 'lucide-react';
+import { LayoutDashboard, Table, Calendar, Activity, ClipboardList, PackageSearch, History, Clock, Database, TrendingUp, FileText, AlertOctagon, Users } from 'lucide-react';
+import { AppUser } from '../types';
 
 interface SidebarProps {
   currentView: string;
   onChangeView: (view: string) => void;
+  currentUser: AppUser | null;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, currentUser }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -23,17 +25,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
     { id: 'dashboard', label: 'ภาพรวม (Overview)', icon: <LayoutDashboard size={20} /> },
     { id: 'plan', label: 'แผนการผลิต', icon: <ClipboardList size={20} /> },
     { id: 'import-plan', label: 'นำเข้าแผนผลิต (Excel)', icon: <FileText size={20} /> },
+    { id: 'plan-vs-actual', label: 'ติดตามยอดผลิตรายชั่วโมง', icon: <Clock size={20} /> },
     { id: 'analysis', label: 'วิเคราะห์การผลิต', icon: <TrendingUp size={20} /> },
     { id: 'oee', label: 'OEE Dashboard', icon: <Activity size={20} /> },
     { id: 'machines', label: 'สถานะเครื่องจักร', icon: <Activity size={20} /> },
     { id: 'schedule', label: 'ไทม์ไลน์ (Timeline)', icon: <Calendar size={20} /> },
-    { id: 'inventory', label: 'คลังวัตถุดิบ & BOM', icon: <PackageSearch size={20} /> },
+    { id: 'inventory', label: 'สินค้าคงเหลือ (FG) & วัตถุดิบ', icon: <PackageSearch size={20} /> },
     { id: 'master-data', label: 'ฐานข้อมูลหลัก (Master)', icon: <Database size={20} /> },
     { id: 'list', label: 'รายการงานทั้งหมด', icon: <Table size={20} /> },
     { id: 'downtime-logs', label: 'บันทึกเครื่องจักรขัดข้อง', icon: <AlertOctagon size={20} /> },
     { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
     { id: 'history', label: 'ประวัติการทำงาน', icon: <History size={20} /> },
   ];
+
+  if (currentUser?.role === 'admin') {
+    menuItems.push({ id: 'users', label: 'จัดการผู้ใช้งาน', icon: <Users size={20} /> });
+  }
 
   return (
     <div className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col h-screen fixed left-0 top-0 z-10 hidden md:flex">
@@ -47,19 +54,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
         </div>
       </div>
       
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
         {menuItems.map((item) => (
           <button
             key={item.id}
             onClick={() => onChangeView(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-kanit ${
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-kanit group ${
               currentView === item.id 
-                ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20' 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                ? 'bg-brand-600 text-white shadow-md shadow-brand-900/20 translate-x-1' 
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white hover:translate-x-1'
             }`}
           >
-            {item.icon}
-            <span className="font-medium">{item.label}</span>
+            <div className={`${currentView === item.id ? 'text-white' : 'text-slate-500 group-hover:text-brand-400'} transition-colors`}>
+              {item.icon}
+            </div>
+            <span className="font-medium text-sm">{item.label}</span>
           </button>
         ))}
       </nav>

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ProductionJob, SIMULATED_NOW, sortMachines } from '../types';
-import { Cpu, Zap, AlertTriangle, Play, Pause, AlertOctagon } from 'lucide-react';
+import { Cpu, Zap, AlertTriangle, Play, Pause, AlertOctagon, CheckCircle2, Clock } from 'lucide-react';
 
 interface MachineGridProps {
   jobs: ProductionJob[];
@@ -38,7 +38,7 @@ export const MachineGrid: React.FC<MachineGridProps> = ({ jobs, onEditJob }) => 
     switch (status) {
       case 'Running': return 'border-emerald-500 bg-emerald-50';
       case 'Delayed': return 'border-red-500 bg-red-50';
-      case 'Stopped': return 'border-slate-300 bg-slate-50';
+      case 'Stopped': return 'border-slate-400 bg-slate-100';
       case 'Maintenance': return 'border-orange-500 bg-orange-50';
       default: return 'border-slate-200 bg-white';
     }
@@ -64,80 +64,149 @@ export const MachineGrid: React.FC<MachineGridProps> = ({ jobs, onEditJob }) => 
     }
   };
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 font-kanit">
-      {machineIds.map(id => {
-        const { activeJob, nextJob } = getMachineStatus(id);
-        const displayJob = activeJob || nextJob;
-        const isRunning = activeJob && activeJob.status !== 'Stopped' && activeJob.status !== 'Maintenance';
-        
-        return (
-          <div 
-            key={id} 
-            onClick={() => displayJob && onEditJob(displayJob)}
-            className={`rounded-xl border-l-4 shadow-sm p-5 transition-all hover:shadow-md cursor-pointer bg-white ${activeJob ? getStatusColor(activeJob.status) : 'border-slate-300'}`}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${activeJob ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
-                  <Cpu className="text-slate-700" size={20} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg text-slate-800">{id}</h3>
-                  <p className="text-xs text-slate-500">
-                    {activeJob ? getStatusTextThai(activeJob.status) : 'เครื่องว่าง'}
-                  </p>
-                </div>
-              </div>
-              <div className="px-2 py-1 rounded-md bg-white shadow-sm border border-slate-100">
-                {activeJob ? getStatusIcon(activeJob.status) : <Pause size={16} className="text-slate-400"/>}
-              </div>
-            </div>
+  // Calculate summary stats
+  const stats = useMemo(() => {
+    let running = 0;
+    let delayed = 0;
+    let stopped = 0;
+    let idle = 0;
 
-            {displayJob ? (
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">สินค้า:</span>
-                  <span className="font-semibold text-slate-700">{displayJob.productItem}</span>
+    machineIds.forEach(id => {
+      const { activeJob } = getMachineStatus(id);
+      if (activeJob) {
+        if (activeJob.status === 'Running') running++;
+        else if (activeJob.status === 'Delayed') delayed++;
+        else if (activeJob.status === 'Stopped' || activeJob.status === 'Maintenance') stopped++;
+      } else {
+        idle++;
+      }
+    });
+
+    return { running, delayed, stopped, idle, total: machineIds.length };
+  }, [machineIds, jobs]);
+
+  return (
+    <div className="space-y-6 font-kanit">
+      {/* Summary Header */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+         <div className="flex items-center gap-3">
+            <div className="bg-brand-100 p-2 rounded-lg text-brand-600">
+               <Cpu size={24} />
+            </div>
+            <div>
+               <h2 className="text-lg font-bold text-slate-800">สถานะเครื่องจักร (Real-time)</h2>
+               <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Clock size={12} />
+                  <span>ข้อมูล ณ {SIMULATED_NOW.toLocaleString('th-TH')}</span>
+               </div>
+            </div>
+         </div>
+         
+         <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0">
+            <div className="flex flex-col items-center px-4 py-2 bg-emerald-50 rounded-lg border border-emerald-100 min-w-[80px]">
+               <span className="text-2xl font-bold text-emerald-600">{stats.running}</span>
+               <span className="text-[10px] text-emerald-800 uppercase font-semibold">กำลังผลิต</span>
+            </div>
+            <div className="flex flex-col items-center px-4 py-2 bg-red-50 rounded-lg border border-red-100 min-w-[80px]">
+               <span className="text-2xl font-bold text-red-600">{stats.delayed}</span>
+               <span className="text-[10px] text-red-800 uppercase font-semibold">ล่าช้า</span>
+            </div>
+            <div className="flex flex-col items-center px-4 py-2 bg-slate-100 rounded-lg border border-slate-200 min-w-[80px]">
+               <span className="text-2xl font-bold text-slate-600">{stats.stopped}</span>
+               <span className="text-[10px] text-slate-700 uppercase font-semibold">หยุด/ซ่อม</span>
+            </div>
+            <div className="flex flex-col items-center px-4 py-2 bg-white rounded-lg border border-slate-200 min-w-[80px]">
+               <span className="text-2xl font-bold text-slate-400">{stats.idle}</span>
+               <span className="text-[10px] text-slate-500 uppercase font-semibold">ว่าง</span>
+            </div>
+         </div>
+      </div>
+
+      {/* Machine Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {machineIds.map(id => {
+          const { activeJob, nextJob } = getMachineStatus(id);
+          const displayJob = activeJob || nextJob;
+          
+          return (
+            <div 
+              key={id} 
+              onClick={() => displayJob && onEditJob(displayJob)}
+              className={`relative rounded-xl border-t-4 shadow-sm p-4 transition-all hover:shadow-md bg-white flex flex-col h-full ${activeJob ? getStatusColor(activeJob.status).replace('border-', 'border-t-') : 'border-t-slate-300'} ${displayJob ? 'cursor-pointer hover:-translate-y-1' : ''}`}
+            >
+              {/* Header */}
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-md flex items-center justify-center ${activeJob ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
+                    <Cpu className={activeJob ? 'text-slate-700' : 'text-slate-400'} size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-slate-800 leading-none">{id}</h3>
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${activeJob ? (activeJob.status === 'Running' ? 'bg-emerald-100 text-emerald-700' : activeJob.status === 'Delayed' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700') : 'bg-slate-100 text-slate-500'}`}>
+                      {activeJob ? getStatusTextThai(activeJob.status) : 'ว่าง (Idle)'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">แม่พิมพ์:</span>
-                  <span className="font-mono text-slate-600">{displayJob.moldCode}</span>
+                <div className="p-1.5 rounded-md bg-white shadow-sm border border-slate-100">
+                  {activeJob ? getStatusIcon(activeJob.status) : <CheckCircle2 size={16} className="text-slate-300"/>}
                 </div>
-                
-                {activeJob && (
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-500">ความคืบหน้า</span>
-                      <span className="font-medium text-slate-700">{Math.round(getProgress(activeJob.startDate, activeJob.endDate))}%</span>
+              </div>
+
+              {/* Content */}
+              <div className="flex-grow flex flex-col justify-center">
+                {displayJob ? (
+                  <div className="space-y-2">
+                    <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">สินค้าที่ผลิต</div>
+                      <div className="font-semibold text-slate-700 text-sm truncate" title={displayJob.productItem}>{displayJob.productItem}</div>
+                      <div className="text-xs text-slate-500 mt-1 flex justify-between">
+                         <span>แม่พิมพ์: <span className="font-mono text-slate-700">{displayJob.moldCode}</span></span>
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full ${activeJob.status === 'Delayed' ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${getProgress(activeJob.startDate, activeJob.endDate)}%` }}
-                      ></div>
+                    
+                    {activeJob && (
+                      <div className="pt-2">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-500 font-medium">ความคืบหน้า</span>
+                          <span className="font-bold text-slate-700">{Math.round(getProgress(activeJob.startDate, activeJob.endDate))}%</span>
+                        </div>
+                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${activeJob.status === 'Delayed' ? 'bg-red-500' : 'bg-emerald-500'}`} 
+                            style={{ width: `${getProgress(activeJob.startDate, activeJob.endDate)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-[9px] text-slate-400 mt-1.5 font-mono">
+                          <span>{new Date(activeJob.startDate).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})}</span>
+                          <span>{new Date(activeJob.endDate).toLocaleTimeString('th-TH', {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {!activeJob && nextJob && (
+                       <div className="mt-auto pt-2 border-t border-slate-100">
+                          <div className="text-[10px] text-slate-400 mb-1">งานถัดไป:</div>
+                          <div className="text-xs font-medium text-slate-600 truncate">{nextJob.productItem}</div>
+                          <div className="text-[10px] text-brand-600 mt-0.5 flex items-center gap-1">
+                             <Clock size={10} />
+                             เริ่ม {new Date(nextJob.startDate).toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' })}
+                          </div>
+                       </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-slate-400 py-4">
+                    <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mb-2">
+                       <CheckCircle2 size={20} className="text-slate-300" />
                     </div>
-                    <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                      <span>เริ่ม: {new Date(activeJob.startDate).toLocaleDateString('th-TH')}</span>
-                      <span>จบ: {new Date(activeJob.endDate).toLocaleDateString('th-TH')}</span>
-                    </div>
+                    <span className="text-xs font-medium">ไม่มีแผนงาน</span>
                   </div>
                 )}
-                
-                {!activeJob && nextJob && (
-                   <div className="mt-2 p-2 bg-slate-50 rounded text-xs text-slate-500 border border-slate-100">
-                      ถัดไป: {nextJob.productItem} เริ่ม {new Date(nextJob.startDate).toLocaleDateString('th-TH')}
-                   </div>
-                )}
               </div>
-            ) : (
-              <div className="h-24 flex items-center justify-center text-slate-400 text-sm italic">
-                ไม่มีแผนการผลิต
-              </div>
-            )}
-          </div>
-        );
-      })}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

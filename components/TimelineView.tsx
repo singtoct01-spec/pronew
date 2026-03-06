@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { ProductionJob } from '../types';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Search, Filter, AlertCircle, CheckCircle2, PlayCircle, Clock, Info } from 'lucide-react';
 
 interface TimelineViewProps {
   jobs: ProductionJob[];
@@ -9,7 +9,26 @@ interface TimelineViewProps {
 }
 
 export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob }) => {
-  // 1. Calculate Dynamic Date Range
+  // --- Filter & Search State ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+
+  // Apply Filters
+  const filteredJobs = useMemo(() => {
+    return jobs.filter(job => {
+      const matchesSearch = 
+        job.jobOrder.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        job.productItem.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'All' || job.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [jobs, searchTerm, statusFilter]);
+
+  // 1. Calculate Dynamic Date Range (using filteredJobs for range, or all jobs?)
+  // It's usually better to keep the timeline scale stable based on ALL jobs, 
+  // but only SHOW filtered jobs.
   const { startDate, endDate, totalDays, days } = useMemo(() => {
     const validJobs = jobs.filter(j => j.startDate && j.endDate && !isNaN(new Date(j.startDate).getTime()) && !isNaN(new Date(j.endDate).getTime()));
 
@@ -74,12 +93,22 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
 
   const getBarColor = (status: string) => {
     switch (status) {
-      case 'Running': return 'bg-emerald-500 border border-emerald-600';
-      case 'Delayed': return 'bg-red-500 border border-red-600';
-      case 'Completed': return 'bg-blue-400 border border-blue-500';
-      case 'Maintenance': return 'bg-orange-400 border border-orange-500 stripes-orange';
-      case 'Paused': return 'bg-amber-400 border border-amber-500';
-      default: return 'bg-slate-300 border border-slate-400';
+      case 'Running': return 'bg-emerald-500 border-emerald-600';
+      case 'Delayed': return 'bg-red-500 border-red-600';
+      case 'Completed': return 'bg-blue-400 border-blue-500';
+      case 'Maintenance': return 'bg-orange-400 border-orange-500 stripes-orange';
+      case 'Paused': return 'bg-amber-400 border-amber-500';
+      default: return 'bg-slate-300 border-slate-400';
+    }
+  };
+
+  const getProgressColor = (status: string) => {
+    switch (status) {
+      case 'Running': return 'bg-emerald-600';
+      case 'Delayed': return 'bg-red-600';
+      case 'Completed': return 'bg-blue-500';
+      case 'Paused': return 'bg-amber-500';
+      default: return 'bg-slate-400';
     }
   };
 
@@ -96,6 +125,9 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
     currentWidth: number;
     currentMachine: string;
   } | null>(null);
+
+  // Tooltip State
+  const [hoveredJob, setHoveredJob] = useState<{job: ProductionJob, x: number, y: number} | null>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -154,6 +186,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
     e.stopPropagation();
     if (!job.startDate || !job.endDate) return;
 
+    setHoveredJob(null); // Hide tooltip when dragging starts
+
     const left = getPosition(job.startDate);
     const width = getPosition(job.endDate) - left;
 
@@ -176,27 +210,79 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
     }
   };
 
+  const handleJobMouseEnter = (e: React.MouseEvent, job: ProductionJob) => {
+    if (dragState) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoveredJob({
+      job,
+      x: rect.left + rect.width / 2,
+      y: rect.top
+    });
+  };
+
+  const handleJobMouseLeave = () => {
+    setHoveredJob(null);
+  };
+
+  // Calculate Current Time Position
+  const now = new Date();
+  const nowPosition = getPosition(now.toISOString());
+  const showNowLine = now >= startDate && now <= endDate;
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full font-kanit select-none">
-      <div className="p-5 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 bg-white sticky top-0 z-20">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full font-kanit select-none relative">
+      {/* Header & Controls */}
+      <div className="p-4 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white sticky top-0 z-30">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Timeline การผลิต (Interactive)</h2>
           <p className="text-xs text-slate-500">
              ลากและวางเพื่อย้ายคิวงาน หรือดึงขอบเพื่อเปลี่ยนเวลา
           </p>
         </div>
-        <div className="flex flex-wrap gap-3 text-xs">
-            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> Running</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Delayed</div>
-            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-400 rounded-sm"></div> Completed</div>
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+          {/* Search */}
+          <div className="relative w-full sm:w-48">
+            <Search className="absolute left-2.5 top-2 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              placeholder="ค้นหา Job / สินค้า..." 
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Filter size={16} className="text-slate-400" />
+            <select 
+              className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="All">ทุกสถานะ</option>
+              <option value="Running">กำลังผลิต (Running)</option>
+              <option value="Delayed">ล่าช้า (Delayed)</option>
+              <option value="Planned">รอผลิต (Planned)</option>
+              <option value="Completed">เสร็จสิ้น (Completed)</option>
+            </select>
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-3 text-xs ml-auto bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+              <div className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> Running</div>
+              <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500 rounded-sm"></div> Delayed</div>
+              <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-400 rounded-sm"></div> Completed</div>
+          </div>
         </div>
       </div>
 
       <div className="overflow-x-auto relative flex-1">
         <div className="min-w-[1000px] pb-4">
             {/* Header Dates */}
-            <div className="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-10 h-10 shadow-sm">
-                <div className="w-24 flex-shrink-0 p-2 text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-100 sticky left-0 z-20 shadow-r">
+            <div className="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-20 h-10 shadow-sm">
+                <div className="w-24 flex-shrink-0 p-2 text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-100 sticky left-0 z-30 shadow-r">
                     Machine
                 </div>
                 <div className="flex-1 relative" ref={timelineRef}>
@@ -207,13 +293,33 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
                             <span className="text-[9px]">{day.toLocaleDateString('th-TH', { weekday: 'short' })}</span>
                         </div>
                     ))}
+                    
+                    {/* Current Time Line (Header Part) */}
+                    {showNowLine && (
+                      <div 
+                        className="absolute top-0 bottom-0 w-px bg-red-500 z-40"
+                        style={{ left: `${nowPosition}%` }}
+                      >
+                        <div className="absolute -top-0 -translate-x-1/2 bg-red-500 text-white text-[9px] font-bold px-1 rounded-sm whitespace-nowrap">
+                          วันนี้
+                        </div>
+                      </div>
+                    )}
                 </div>
             </div>
 
             {/* Rows */}
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 relative">
+                {/* Current Time Line (Body Part) */}
+                {showNowLine && (
+                  <div 
+                    className="absolute top-0 bottom-0 w-px bg-red-500/50 z-10 pointer-events-none"
+                    style={{ left: `calc(6rem + ${nowPosition} * (100% - 6rem) / 100)` }} // 6rem is w-24
+                  />
+                )}
+
                 {machines.map(machineId => {
-                    const machineJobs = jobs.filter(j => j.machineId === machineId && (!dragState || dragState.jobId !== j.id));
+                    const machineJobs = filteredJobs.filter(j => j.machineId === machineId && (!dragState || dragState.jobId !== j.id));
                     const isDragTarget = dragState && dragState.currentMachine === machineId;
                     
                     return (
@@ -222,7 +328,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
                           className={`flex h-14 transition-colors ${isDragTarget ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}
                           onMouseEnter={() => handleRowDragEnter(machineId)}
                         >
-                            <div className="w-24 flex-shrink-0 p-2 font-bold text-slate-700 border-r border-slate-200 flex items-center justify-center bg-white sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                            <div className="w-24 flex-shrink-0 p-2 font-bold text-slate-700 border-r border-slate-200 flex items-center justify-center bg-white sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                                 {machineId}
                             </div>
                             <div className="flex-1 relative group">
@@ -241,27 +347,46 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
                                     
                                     if (width <= 0) return null;
 
+                                    // Calculate Progress
+                                    const progress = job.totalProduction > 0 
+                                      ? Math.min(100, Math.round(((job.actualProduction || 0) / job.totalProduction) * 100))
+                                      : 0;
+
                                     return (
                                         <div 
                                             key={job.id}
-                                            className={`absolute top-2 bottom-2 rounded-md shadow-sm ${getBarColor(job.status)} cursor-grab active:cursor-grabbing flex items-center px-2 overflow-hidden transition-all hover:z-20 group/job`}
+                                            className={`absolute top-2 bottom-2 rounded-md shadow-sm border ${getBarColor(job.status)} cursor-grab active:cursor-grabbing flex items-center overflow-hidden transition-all hover:z-30 hover:shadow-md group/job`}
                                             style={{ left: `${left}%`, width: `${width}%` }}
-                                            title={`${job.productItem} (${job.status})\nStart: ${new Date(job.startDate).toLocaleString('th-TH')}\nEnd: ${new Date(job.endDate).toLocaleString('th-TH')}`}
                                             onMouseDown={(e) => handleMouseDown(e, job, 'move')}
+                                            onMouseEnter={(e) => handleJobMouseEnter(e, job)}
+                                            onMouseLeave={handleJobMouseLeave}
                                         >
+                                            {/* Progress Bar Background */}
+                                            <div 
+                                              className={`absolute left-0 top-0 bottom-0 ${getProgressColor(job.status)} opacity-40`}
+                                              style={{ width: `${progress}%` }}
+                                            />
+
                                             {/* Left Resize Handle */}
                                             <div 
                                               className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-black/20 z-10"
                                               onMouseDown={(e) => handleMouseDown(e, job, 'resize-left')}
                                             />
                                             
-                                            <div className="flex flex-col overflow-hidden pointer-events-none w-full">
+                                            <div className="flex flex-col overflow-hidden pointer-events-none w-full px-2 z-10">
                                                 <span className="text-[10px] text-white font-bold whitespace-nowrap truncate drop-shadow-md leading-tight">
                                                     {job.productItem}
                                                 </span>
-                                                <span className="text-[8px] text-white/90 whitespace-nowrap truncate leading-tight">
-                                                    {job.jobOrder}
-                                                </span>
+                                                <div className="flex justify-between items-center">
+                                                  <span className="text-[8px] text-white/90 whitespace-nowrap truncate leading-tight">
+                                                      {job.jobOrder}
+                                                  </span>
+                                                  {progress > 0 && (
+                                                    <span className="text-[8px] text-white font-bold ml-1 drop-shadow-md">
+                                                      {progress}%
+                                                    </span>
+                                                  )}
+                                                </div>
                                             </div>
 
                                             {/* Right Resize Handle */}
@@ -280,7 +405,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
                                     return (
                                         <div 
                                             key={`drag-${job.id}`}
-                                            className={`absolute top-2 bottom-2 rounded-md shadow-lg ${getBarColor(job.status)} opacity-80 z-50 flex items-center px-2 overflow-hidden ring-2 ring-blue-500`}
+                                            className={`absolute top-2 bottom-2 rounded-md shadow-lg border ${getBarColor(job.status)} opacity-80 z-50 flex items-center px-2 overflow-hidden ring-2 ring-blue-500`}
                                             style={{ left: `${dragState.currentLeft}%`, width: `${dragState.currentWidth}%` }}
                                         >
                                             <div className="flex flex-col overflow-hidden pointer-events-none w-full">
@@ -301,6 +426,86 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
             </div>
         </div>
       </div>
+
+      {/* Custom Tooltip / Popover */}
+      {hoveredJob && (
+        <div 
+          className="fixed z-[100] bg-white rounded-xl shadow-xl border border-slate-200 p-4 w-72 pointer-events-none transform -translate-x-1/2 -translate-y-full mt-[-10px]"
+          style={{ 
+            left: hoveredJob.x, 
+            top: hoveredJob.y,
+            // Ensure tooltip stays within viewport
+            marginLeft: Math.max(0, 144 - hoveredJob.x) + Math.min(0, window.innerWidth - (hoveredJob.x + 144))
+          }}
+        >
+          {/* Tooltip Arrow */}
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-b border-r border-slate-200 transform rotate-45"></div>
+          
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-2">
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm">{hoveredJob.job.productItem}</h3>
+                <p className="text-xs text-slate-500 font-mono">{hoveredJob.job.jobOrder}</p>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                hoveredJob.job.status === 'Running' ? 'bg-emerald-100 text-emerald-700' :
+                hoveredJob.job.status === 'Delayed' ? 'bg-red-100 text-red-700' :
+                hoveredJob.job.status === 'Completed' ? 'bg-blue-100 text-blue-700' :
+                'bg-slate-100 text-slate-700'
+              }`}>
+                {hoveredJob.job.status}
+              </span>
+            </div>
+
+            <div className="space-y-2 mt-3">
+              <div className="flex items-center text-xs text-slate-600">
+                <Clock size={14} className="mr-2 text-slate-400" />
+                <span>
+                  {new Date(hoveredJob.job.startDate).toLocaleDateString('th-TH', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})} - 
+                  {new Date(hoveredJob.job.endDate).toLocaleDateString('th-TH', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})}
+                </span>
+              </div>
+              
+              <div className="flex items-center text-xs text-slate-600">
+                <Info size={14} className="mr-2 text-slate-400" />
+                <span>แม่พิมพ์: <span className="font-medium">{hoveredJob.job.moldCode}</span></span>
+              </div>
+
+              {/* Progress Section in Tooltip */}
+              <div className="pt-2 border-t border-slate-100 mt-2">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-500">ความคืบหน้า</span>
+                  <span className="font-bold text-slate-700">
+                    {hoveredJob.job.actualProduction?.toLocaleString() || 0} / {hoveredJob.job.totalProduction.toLocaleString()}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full ${
+                      hoveredJob.job.status === 'Delayed' ? 'bg-red-500' : 
+                      hoveredJob.job.status === 'Completed' ? 'bg-blue-500' : 
+                      'bg-emerald-500'
+                    }`}
+                    style={{ 
+                      width: `${hoveredJob.job.totalProduction > 0 ? Math.min(100, ((hoveredJob.job.actualProduction || 0) / hoveredJob.job.totalProduction) * 100) : 0}%` 
+                    }}
+                  ></div>
+                </div>
+                <div className="text-right text-[10px] text-slate-400 mt-0.5">
+                  {hoveredJob.job.totalProduction > 0 ? Math.round(((hoveredJob.job.actualProduction || 0) / hoveredJob.job.totalProduction) * 100) : 0}%
+                </div>
+              </div>
+
+              {hoveredJob.job.remarks && (
+                <div className="mt-2 p-2 bg-amber-50 rounded text-xs text-amber-800 border border-amber-100">
+                  <span className="font-bold">หมายเหตุ:</span> {hoveredJob.job.remarks}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

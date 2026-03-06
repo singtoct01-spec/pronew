@@ -176,6 +176,16 @@ export interface AiMessage {
   };
 }
 
+export interface AppUser {
+  id: string;
+  username: string;
+  password?: string;
+  name: string;
+  role: 'admin' | 'user';
+  createdAt: string;
+  isActive: boolean;
+}
+
 export interface AuditLog {
   id: string;
   timestamp: string;
@@ -461,8 +471,20 @@ export const PRODUCT_SPECS: ProductSpec[] = [
   },
 ];
 
-// Updated Simulated Time to match the "Current" state of the plan (Feb 22 Evening)
-export const SIMULATED_NOW = new Date(); 
+// Use actual real-time for the application
+export const SIMULATED_NOW = new Date();
+
+// Calculate the time difference between the original mock data's "current time" and the actual current time
+const MOCK_BASE_TIME = new Date('2026-02-22T20:00:00').getTime();
+const TIME_OFFSET = SIMULATED_NOW.getTime() - MOCK_BASE_TIME;
+
+// Helper to shift dates so mock data always looks "live" relative to the current real-time
+const shiftDate = (dateString: string) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  return new Date(d.getTime() + TIME_OFFSET).toISOString();
+};
 
 export const MOCK_INVENTORY: InventoryItem[] = [
   // Raw Materials
@@ -526,7 +548,7 @@ export const MOCK_BOMS: ProductBOM[] = [
 ];
 
 // Optimized Plan based on User Logic (Consolidated Molds on IO2/IO4)
-export const MOCK_DATA: ProductionJob[] = [
+const RAW_MOCK_DATA: ProductionJob[] = [
   // --- IP Group ---
   {
     id: 'ip1-1', machineId: 'IP1', productItem: 'P45', productType: 'Preform', moldCode: 'P45', jobOrder: 'B6902-055',
@@ -916,3 +938,10 @@ export const MOCK_DATA: ProductionJob[] = [
     status: 'Planned', remarks: 'ปิด OT 300 ใบ/ชม.สลับพัก 1 ชม. เดินเครื่อง 7 ชม.'
   },
 ];
+
+// Export the shifted mock data so it looks "live" relative to the actual real-time
+export const MOCK_DATA: ProductionJob[] = RAW_MOCK_DATA.map(job => ({
+  ...job,
+  startDate: shiftDate(job.startDate),
+  endDate: shiftDate(job.endDate),
+}));

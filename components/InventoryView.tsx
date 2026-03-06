@@ -168,7 +168,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         'สถานที่เก็บ': 'WH-A1',
         'กลุ่ม': 'PET',
         'การใช้งาน': 'ผลิตขวดน้ำดื่ม',
-        'หมายเหตุ': ''
+        'หมายเหตุ': 'ตัวอย่างวัตถุดิบ'
+      },
+      {
+        'รหัสสินค้า': 'FG-001',
+        'ชื่อสินค้า': 'ขวดน้ำดื่ม 600ml',
+        'หมวดหมู่': 'FG',
+        'หน่วย': 'pcs',
+        'ยอดคงเหลือ': 12000,
+        'Min Stock': 5000,
+        'Max Stock': 50000,
+        'สถานที่เก็บ': 'WH-FG1',
+        'กลุ่ม': 'Bottle',
+        'การใช้งาน': 'ขายส่ง',
+        'หมายเหตุ': 'ตัวอย่างสินค้าสำเร็จรูป'
       }
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
@@ -230,7 +243,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         >
           <div className="flex items-center gap-2">
             <Package size={18} />
-            สต๊อคคงเหลือ (Inventory)
+            สต๊อคคงเหลือ (FG & วัตถุดิบ)
           </div>
         </button>
         <button 
@@ -248,7 +261,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       {activeTab === 'inventory' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-             <h2 className="text-lg font-bold text-slate-800">รายการสินค้าและวัตถุดิบ</h2>
+             <h2 className="text-lg font-bold text-slate-800">รายการสินค้าสำเร็จรูป (FG) และวัตถุดิบ</h2>
              <div className="flex gap-2 w-full lg:w-auto flex-wrap justify-end">
                 <div className="relative">
                     <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -287,6 +300,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium shadow-sm transition-colors"
+                  title="นำเข้าข้อมูลสินค้าสำเร็จรูป (FG) และวัตถุดิบผ่านไฟล์ Excel"
                 >
                   <Upload size={16} />
                   <span className="hidden sm:inline">นำเข้า Excel</span>

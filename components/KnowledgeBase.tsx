@@ -308,8 +308,8 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, o
             <div className="p-4">
               {filteredCustom.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredCustom.map((k) => (
-                    <div key={k.id} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col h-full">
+                  {filteredCustom.map((k, idx) => (
+                    <div key={k.id || `custom-${idx}`} className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col h-full">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-bold text-slate-800 text-lg">{k.topic}</h3>
                         <button 

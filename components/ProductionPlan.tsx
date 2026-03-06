@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProductionJob, Status, SIMULATED_NOW, MOCK_INVENTORY, MOCK_BOMS, sortMachines } from '../types';
-import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download, Upload } from 'lucide-react';
+import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download, Upload, Tag, Share } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -12,12 +12,14 @@ interface ProductionPlanProps {
   jobs: ProductionJob[];
   onEditJob: (job: ProductionJob) => void;
   onViewOrder: (job: ProductionJob) => void;
+  onPrintTag?: (job: ProductionJob) => void;
+  onPrintHandover?: (jobs: ProductionJob[]) => void;
   onImportJobs?: (jobs: Partial<ProductionJob>[]) => void;
   onPrintPlan?: () => void;
   onOpenImportModal?: () => void;
 }
 
-export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob, onViewOrder, onImportJobs, onPrintPlan, onOpenImportModal }) => {
+export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob, onViewOrder, onPrintTag, onPrintHandover, onImportJobs, onPrintPlan, onOpenImportModal }) => {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -473,6 +475,24 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
                                                 >
                                                     <FileText size={16} /> <span className="md:hidden lg:inline">ใบสั่งผลิต</span>
                                                 </button>
+                                                {onPrintTag && (
+                                                    <button 
+                                                        onClick={() => onPrintTag(job)}
+                                                        className="p-2 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 rounded-lg transition-colors shadow-sm"
+                                                        title="พิมพ์ป้ายบ่งชี้ (Product Tag)"
+                                                    >
+                                                        <Tag size={16} />
+                                                    </button>
+                                                )}
+                                                {onPrintHandover && (
+                                                    <button 
+                                                        onClick={() => onPrintHandover([job])}
+                                                        className="p-2 bg-white border border-slate-200 hover:bg-emerald-50 hover:text-emerald-600 text-slate-600 rounded-lg transition-colors shadow-sm"
+                                                        title="พิมพ์ใบส่งมอบงาน"
+                                                    >
+                                                        <Share size={16} />
+                                                    </button>
+                                                )}
                                                 <button 
                                                     onClick={() => onEditJob(job)}
                                                     className="p-2 bg-white border border-slate-200 hover:bg-brand-50 hover:text-brand-600 text-slate-600 rounded-lg transition-colors shadow-sm"

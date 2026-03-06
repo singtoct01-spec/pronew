@@ -22,9 +22,22 @@ interface SmartAssistantProps {
   downtimeLogs?: DowntimeLog[];
   onUpdateJob: (job: ProductionJob) => void;
   onCreateJob: (job: ProductionJob) => void;
+  onDeleteJob?: (jobId: string) => void;
+  onUpdateActuals?: (jobId: string, actuals: number, reason?: string) => void;
   onBatchUpsert?: (jobs: ProductionJob[]) => void;
   onGenerateForm?: (html: string, title: string) => void;
   onLogDowntime?: (data: any) => void;
+  onAddKnowledge?: (topic: string, content: string) => void;
+  onAddBom?: (bom: Omit<ProductBOM, 'id'>) => void;
+  onUpdateBom?: (bom: ProductBOM) => void;
+  onDeleteBom?: (id: string) => void;
+  onAddInventory?: (item: Omit<InventoryItem, 'id'>) => void;
+  onUpdateInventory?: (item: InventoryItem) => void;
+  onDeleteInventory?: (id: string) => void;
+  onChangeView?: (view: string) => void;
+  onPrintTag?: (jobOrder: string) => void;
+  onPrintHandover?: (jobOrders: string[]) => void;
+  onOpenImportModal?: () => void;
   messages: AiMessage[];
   setMessages: React.Dispatch<React.SetStateAction<AiMessage[]>>;
 }
@@ -50,9 +63,22 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   downtimeLogs,
   onUpdateJob,
   onCreateJob,
+  onDeleteJob,
+  onUpdateActuals,
   onBatchUpsert,
   onGenerateForm,
   onLogDowntime,
+  onAddKnowledge,
+  onAddBom,
+  onUpdateBom,
+  onDeleteBom,
+  onAddInventory,
+  onUpdateInventory,
+  onDeleteInventory,
+  onChangeView,
+  onPrintTag,
+  onPrintHandover,
+  onOpenImportModal,
   messages,
   setMessages
 }) => {
@@ -61,8 +87,9 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   
   const [apiKeyInput, setApiKeyInput] = useState('');
-  const [savedApiKey, setSavedApiKey] = useState(() => localStorage.getItem('proplanner_gemini_api_key') || '');
-  const [showKeySetup, setShowKeySetup] = useState(!localStorage.getItem('proplanner_gemini_api_key'));
+  const [savedApiKey, setSavedApiKey] = useState(() => localStorage.getItem('proplanner_gemini_api_key') || process.env.GEMINI_API_KEY || '');
+  const [showKeySetup, setShowKeySetup] = useState(() => !localStorage.getItem('proplanner_gemini_api_key') && !process.env.GEMINI_API_KEY);
+  const [setupError, setSetupError] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,6 +98,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     if (apiKeyInput.trim()) {
       localStorage.setItem('proplanner_gemini_api_key', apiKeyInput.trim());
       setSavedApiKey(apiKeyInput.trim());
+      setSetupError('');
       setShowKeySetup(false);
     }
   };
@@ -79,6 +107,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     localStorage.removeItem('proplanner_gemini_api_key');
     setSavedApiKey('');
     setApiKeyInput('');
+    setSetupError('');
     setShowKeySetup(true);
   };
 
@@ -253,10 +282,15 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         - \`totalTarget\` = The goal.
         - Negative numbers in reports often mean "Stock Deficit" (Owe customers), but in Inventory reports, dashes '-' usually mean 0. Use context.
 
+        **LONG-TERM MEMORY (CUSTOM KNOWLEDGE):**
+        - You have a "Long-term Memory" feature. If the user tells you a specific rule, preference, or fact that should be remembered *forever* (e.g., "Machine AB1 is old", "Manager likes blue reports"), use the \`addKnowledge\` tool to save it.
+        - Do not just say "I will remember". ACTUALLY save it using the tool.
+        
         **RESPONSE FORMAT & ACTIONS:**
         - Talk naturally in Thai.
         - Use emojis 🏭 ⚠️ ✅ appropriately.
-        - **Direct Actions (Function Calling):** If the user asks to "เลื่อนงาน", "อัปเดตสถานะงาน", or "บันทึกเครื่องจักรเสีย", you MUST use the provided tools (Function Calling) to execute the action immediately. Do not return a JSON block for these.
+        - **Direct Actions (Function Calling):** If the user asks to "เลื่อนงาน", "อัปเดตสถานะงาน", "บันทึกเครื่องจักรเสีย", "สร้างสูตรการผลิต" (BOM), "เพิ่มสินค้า", "เปิดหน้า...", "อัปเดตยอดผลิต", "ลบงาน", "ปริ้นเอกสาร", "เปิดหน้านำเข้า" or "จำว่า...", you MUST use the provided tools (Function Calling) to execute the action immediately. Do not return a JSON block for these.
+        - **Navigation:** If the user asks to open a specific page (e.g., "เปิดหน้าคลังสินค้า", "พาไปดูแผนการผลิต"), use the \`navigateApp\` tool.
         - **Other Actions (JSON Block):** For actions that don't have a specific tool (like creating a new job, batch importing schedule, or generating a form), append a JSON block for Action Proposal EXACTLY in this format:
         \`\`\`json
         {
@@ -453,12 +487,140 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         }
       };
 
+      const addKnowledgeFunc: FunctionDeclaration = {
+        name: "addKnowledge",
+        description: "บันทึกความรู้ใหม่ กฎ หรือข้อเท็จจริงสำคัญลงใน Long-term Memory (เช่น 'เครื่อง AB1 มักจะมีปัญหาเรื่องความร้อน', 'ผู้จัดการชอบรายงานสีฟ้า')",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            topic: { type: Type.STRING, description: "หัวข้อหลัก (เช่น 'Machine AB1', 'Preferences', 'Rules')" },
+            content: { type: Type.STRING, description: "เนื้อหาความรู้ที่ต้องการบันทึก" }
+          },
+          required: ["topic", "content"]
+        }
+      };
+
+      const createBOMFunc: FunctionDeclaration = {
+        name: "createBOM",
+        description: "สร้างสูตรการผลิต (BOM) ใหม่ สำหรับสินค้าที่ยังไม่มีสูตร",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            productItem: { type: Type.STRING, description: "ชื่อสินค้าที่ต้องการสร้างสูตร เช่น 'ขวด B01 (Clear)'" },
+            materials: {
+              type: Type.ARRAY,
+              description: "รายการวัตถุดิบที่ใช้",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  inventoryItemId: { type: Type.STRING, description: "ID ของวัตถุดิบในคลัง (เช่น 'p1', 'r1', 'bg1')" },
+                  qtyPerUnit: { type: Type.NUMBER, description: "จำนวนที่ใช้ต่อ 1 หน่วยสินค้า" },
+                  unitType: { type: Type.STRING, description: "หน่วย เช่น 'pcs', 'kg'" }
+                },
+                required: ["inventoryItemId", "qtyPerUnit", "unitType"]
+              }
+            }
+          },
+          required: ["productItem", "materials"]
+        }
+      };
+
+      const navigateAppFunc: FunctionDeclaration = {
+        name: "navigateApp",
+        description: "เปลี่ยนหน้าจอไปยังเมนูต่างๆ ในระบบ",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            view: { 
+              type: Type.STRING, 
+              description: "หน้าจอที่ต้องการไป: dashboard (ภาพรวม), plan (แผนการผลิต), analysis (วิเคราะห์), schedule (ไทม์ไลน์), list (รายการงาน), machines (เครื่องจักร), inventory (คลังสินค้า), master-data (ข้อมูลหลัก), history (ประวัติ), form-templates (แบบฟอร์มเอกสาร), users (ผู้ใช้งาน)" 
+            }
+          },
+          required: ["view"]
+        }
+      };
+
+      const addInventoryFunc: FunctionDeclaration = {
+        name: "addInventory",
+        description: "เพิ่มรายการสินค้าคงคลังใหม่ (FG หรือ วัตถุดิบ)",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            code: { type: Type.STRING, description: "รหัสสินค้า/วัตถุดิบ" },
+            name: { type: Type.STRING, description: "ชื่อสินค้า/วัตถุดิบ" },
+            category: { type: Type.STRING, description: "หมวดหมู่ (FG, Preform, Resin, Color, Packaging, Other)" },
+            currentStock: { type: Type.NUMBER, description: "จำนวนที่มีอยู่ปัจจุบัน" },
+            minStock: { type: Type.NUMBER, description: "จุดสั่งซื้อ/จำนวนขั้นต่ำ" },
+            unit: { type: Type.STRING, description: "หน่วยนับ (pcs, kg, pack, etc.)" },
+            location: { type: Type.STRING, description: "สถานที่จัดเก็บ (เช่น WH1, Zone A)" }
+          },
+          required: ["code", "name", "category", "currentStock", "minStock", "unit"]
+        }
+      };
+
+      const updateActualProductionFunc: FunctionDeclaration = {
+        name: "updateActualProduction",
+        description: "อัปเดตยอดผลิตที่ทำได้จริงของงาน",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            jobOrder: { type: Type.STRING, description: "หมายเลข Job Order" },
+            actuals: { type: Type.NUMBER, description: "จำนวนยอดผลิตที่ต้องการเพิ่มเข้าไป" },
+            reason: { type: Type.STRING, description: "หมายเหตุ (ถ้ามี)" }
+          },
+          required: ["jobOrder", "actuals"]
+        }
+      };
+
+      const deleteJobFunc: FunctionDeclaration = {
+        name: "deleteJob",
+        description: "ลบรายการผลิต (Job Order) ออกจากระบบ",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            jobOrder: { type: Type.STRING, description: "หมายเลข Job Order ที่ต้องการลบ" }
+          },
+          required: ["jobOrder"]
+        }
+      };
+
+      const printDocumentFunc: FunctionDeclaration = {
+        name: "printDocument",
+        description: "พิมพ์เอกสารต่างๆ เช่น ใบแท็ก (Tag), ใบส่งมอบงาน (Handover), หรือ แผนการผลิต (Plan)",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            documentType: { type: Type.STRING, description: "ประเภทเอกสาร: 'tag', 'handover', 'plan'" },
+            jobOrders: { 
+              type: Type.ARRAY, 
+              description: "หมายเลข Job Order ที่ต้องการพิมพ์ (จำเป็นสำหรับ tag และ handover)",
+              items: { type: Type.STRING }
+            }
+          },
+          required: ["documentType"]
+        }
+      };
+
+      const openImportModalFunc: FunctionDeclaration = {
+        name: "openImportModal",
+        description: "เปิดหน้าต่างนำเข้าแผนการผลิตจาก Excel / Google Sheets",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {}
+        }
+      };
+
       // 5. Call API
       const response = await ai.models.generateContent({
         model: 'gemini-3.1-pro-preview',
         contents: sanitizedContents,
         config: {
-          tools: [{ functionDeclarations: [rescheduleMachineJobsFunc, updateJobStatusFunc, createJobFunc, logDowntimeFunc] }]
+          tools: [{ functionDeclarations: [
+            rescheduleMachineJobsFunc, updateJobStatusFunc, createJobFunc, 
+            logDowntimeFunc, addKnowledgeFunc, createBOMFunc, navigateAppFunc, 
+            addInventoryFunc, updateActualProductionFunc, deleteJobFunc, 
+            printDocumentFunc, openImportModalFunc
+          ] }]
         }
       });
 
@@ -530,6 +692,75 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                onLogDowntime(call.args);
                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** บันทึกข้อมูลเครื่องจักรขัดข้อง (${(call.args as any).machineId} - ${(call.args as any).reason}) เรียบร้อยแล้วครับ`;
              }
+          } else if (call.name === 'addKnowledge') {
+            if (onAddKnowledge) {
+              const { topic, content } = call.args as any;
+              onAddKnowledge(topic, content);
+              displayText += `\n\n🧠 **บันทึกความจำ:** ผมบันทึกข้อมูลเรื่อง "${topic}" ไว้ในหน่วยความจำระยะยาวแล้วครับ (แม้เปลี่ยน API Key ก็ยังจำได้)`;
+            }
+          } else if (call.name === 'createBOM') {
+            if (onAddBom) {
+              const { productItem, materials } = call.args as any;
+              onAddBom({ productItem, materials });
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** สร้างสูตรการผลิต (BOM) สำหรับ "${productItem}" เรียบร้อยแล้วครับ สามารถตรวจสอบได้ที่หน้า 'สูตรการผลิต'`;
+            } else {
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถสร้างสูตรการผลิตได้ (Missing handler)`;
+            }
+          } else if (call.name === 'navigateApp') {
+            if (onChangeView) {
+              const { view } = call.args as any;
+              onChangeView(view);
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้า ${view} ให้เรียบร้อยแล้วครับ`;
+            }
+          } else if (call.name === 'addInventory') {
+            if (onAddInventory) {
+              const { code, name, category, currentStock, minStock, unit, location } = call.args as any;
+              onAddInventory({ code, name, category, currentStock, minStock, unit, location });
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เพิ่มรายการสินค้า/วัตถุดิบ "${name}" (${code}) ลงในคลังเรียบร้อยแล้วครับ`;
+            } else {
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถเพิ่มรายการสินค้าได้ (Missing handler)`;
+            }
+          } else if (call.name === 'updateActualProduction') {
+            if (onUpdateActuals) {
+              const { jobOrder, actuals, reason } = call.args as any;
+              const targetJob = jobs.find(j => j.jobOrder === jobOrder);
+              if (targetJob) {
+                onUpdateActuals(targetJob.id, actuals, reason);
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** อัปเดตยอดผลิตงาน ${jobOrder} เพิ่ม ${actuals} ชิ้น เรียบร้อยแล้วครับ`;
+              } else {
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
+              }
+            }
+          } else if (call.name === 'deleteJob') {
+            if (onDeleteJob) {
+              const { jobOrder } = call.args as any;
+              const targetJob = jobs.find(j => j.jobOrder === jobOrder);
+              if (targetJob) {
+                onDeleteJob(targetJob.id);
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ลบงาน ${jobOrder} ออกจากระบบเรียบร้อยแล้วครับ`;
+              } else {
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
+              }
+            }
+          } else if (call.name === 'printDocument') {
+            const { documentType, jobOrders } = call.args as any;
+            if (documentType === 'tag' && onPrintTag && jobOrders && jobOrders.length > 0) {
+              onPrintTag(jobOrders[0]);
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์ใบแท็กสำหรับงาน ${jobOrders[0]} แล้วครับ`;
+            } else if (documentType === 'handover' && onPrintHandover && jobOrders && jobOrders.length > 0) {
+              onPrintHandover(jobOrders);
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์ใบส่งมอบงานแล้วครับ`;
+            } else if (documentType === 'plan' && onChangeView) {
+              onChangeView('plan-print');
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์แผนการผลิตแล้วครับ`;
+            } else {
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถพิมพ์เอกสารได้ (ข้อมูลไม่ครบถ้วน หรือ Missing handler)`;
+            }
+          } else if (call.name === 'openImportModal') {
+            if (onOpenImportModal) {
+              onOpenImportModal();
+              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าต่างนำเข้าแผนการผลิตจาก Excel ให้แล้วครับ`;
+            }
           }
         }
       } else {
@@ -551,11 +782,48 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         timestamp: new Date().toISOString()
       }]);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Error:", error);
+      let errorMessage = 'ระบบสมองกลขัดข้องชั่วคราว (Network/API Error) กรุณาตรวจสอบ API Key หรือการเชื่อมต่ออินเทอร์เน็ตครับ';
+      
+      // Robust error string extraction
+      let errStr = '';
+      if (typeof error === 'string') {
+        errStr = error;
+      } else if (error.message) {
+        errStr = error.message;
+      } else if (error.error && error.error.message) {
+        // Handle nested error object from Google API
+        errStr = JSON.stringify(error.error);
+      } else {
+        try {
+          errStr = JSON.stringify(error);
+        } catch (e) {
+          errStr = 'Unknown error';
+        }
+      }
+
+      const keyHint = savedApiKey && savedApiKey.length > 4 
+        ? `...${savedApiKey.slice(-4)}` 
+        : '(System Key)';
+
+      if (errStr.includes('API key not valid') || errStr.includes('400') || errStr.includes('INVALID_ARGUMENT')) {
+        errorMessage = `API Key (${keyHint}) ไม่ถูกต้อง กรุณาตรวจสอบ Key ในการตั้งค่าครับ`;
+        setSetupError(`API Key (${keyHint}) ไม่ถูกต้อง`);
+        setShowKeySetup(true);
+      } else if (errStr.includes('quota') || errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED')) {
+        errorMessage = `โควต้าการใช้งาน API เต็ม (Quota Exceeded) สำหรับคีย์ ${keyHint} \n\n⚠️ หมายเหตุ: หากคุณเพิ่งเปลี่ยน Key เป็น Key ฟรีอันใหม่ เป็นไปได้ว่า Key นั้นก็ติดโควต้าเช่นกัน (Google นับโควต้าตามบัญชีผู้ใช้ หรือ IP ในบางกรณี) แนะนำให้ลองใช้ Key จาก Google Cloud Project ที่ผูก Billing แล้ว หรือรอสักครู่ครับ`;
+        setSetupError(`โควต้าเต็ม (Key: ${keyHint}) กรุณาใช้ Key ใหม่`);
+        setShowKeySetup(true);
+      } else if (errStr.includes('network') || errStr.includes('fetch')) {
+        errorMessage = 'เกิดปัญหาการเชื่อมต่ออินเทอร์เน็ต (Network Error) กรุณาตรวจสอบสัญญาณเน็ตครับ';
+      } else {
+         errorMessage = `เกิดข้อผิดพลาด: ${errStr.substring(0, 100)}... (Key: ${keyHint})`;
+      }
+
       setMessages(prev => [...prev, { 
         role: 'model', 
-        text: 'ระบบสมองกลขัดข้องชั่วคราว (Network/API Error) กรุณาตรวจสอบ API Key หรือการเชื่อมต่ออินเทอร์เน็ตครับ',
+        text: errorMessage,
         timestamp: new Date().toISOString()
       }]);
     } finally {
@@ -687,7 +955,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             </div>
             <div>
               <h2 className="font-bold text-lg">ProPlanner Brain</h2>
-              <p className="text-xs text-indigo-200">ตั้งค่าการเชื่อมต่อ AI</p>
+              <p className="text-xs text-indigo-200">
+                {savedApiKey && savedApiKey.length > 10 
+                  ? `Key: ...${savedApiKey.slice(-4)} ${savedApiKey === process.env.GEMINI_API_KEY ? '(System)' : '(Custom)'}`
+                  : 'ตั้งค่าการเชื่อมต่อ AI'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
@@ -701,6 +973,14 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             <Key size={32} />
           </div>
           <h3 className="text-xl font-bold text-slate-800 mb-2">ตั้งค่า Gemini API Key</h3>
+          
+          {setupError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm flex items-center gap-2">
+              <AlertTriangle size={16} />
+              {setupError}
+            </div>
+          )}
+
           <p className="text-sm text-slate-600 mb-6 max-w-xs leading-relaxed">
             เพื่อใช้งานผู้ช่วยอัจฉริยะ คุณจำเป็นต้องใส่ API Key ของคุณเอง <br/>
             <span className="text-xs text-slate-400">(คีย์จะถูกบันทึกไว้ในเบราว์เซอร์ของคุณเท่านั้น ไม่มีการส่งไปเก็บที่เซิร์ฟเวอร์อื่น)</span>
@@ -746,7 +1026,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           </div>
           <div>
             <h2 className="font-bold text-lg">ProPlanner Brain</h2>
-            <p className="text-xs text-indigo-200">ระบบอัจฉริยะ & ฐานข้อมูล Master</p>
+            <p className="text-xs text-indigo-200">
+               {savedApiKey && savedApiKey.length > 10 
+                  ? `Active Key: ...${savedApiKey.slice(-4)}`
+                  : 'ระบบอัจฉริยะ & ฐานข้อมูล Master'}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">

@@ -2,6 +2,7 @@
 
 
 import React, { useState, useEffect, useRef } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, orderBy, getDocs, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { Sidebar } from './components/Sidebar';
@@ -25,15 +26,24 @@ import { CustomFormView } from './components/CustomFormView';
 import { FormTemplatesView } from './components/FormTemplatesView';
 import { DowntimeLogsView } from './components/DowntimeLogsView';
 import { GoogleSheetsImportModal } from './components/GoogleSheetsImportModal';
-import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM } from './types';
-import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X } from 'lucide-react';
+import { PlanVsActualDashboard } from './components/PlanVsActualDashboard';
+import { Login } from './components/Login';
+import { UserManagement } from './components/UserManagement';
+import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM, AppUser } from './types';
+import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X, LogOut, Users } from 'lucide-react';
 
-export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print';
+export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentView = location.pathname.substring(1) || 'dashboard';
+  // const [currentView, setCurrentView] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+
   // State for data management
   const [jobs, setJobs] = useState<ProductionJob[]>([]);
   const [inventory, setInventory] = useState(MOCK_INVENTORY);
@@ -92,7 +102,7 @@ const App: React.FC = () => {
     const unsubscribeCustomKnowledge = onSnapshot(collection(db, 'customKnowledge'), (snapshot) => {
       const knowledgeData: CustomKnowledge[] = [];
       snapshot.forEach((doc) => {
-        knowledgeData.push(doc.data() as CustomKnowledge);
+        knowledgeData.push({ id: doc.id, ...doc.data() } as CustomKnowledge);
       });
       knowledgeData.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       setCustomKnowledge(knowledgeData);
@@ -207,7 +217,12 @@ const App: React.FC = () => {
         
         for (const msg of newMessages) {
           try {
-            await addDoc(collection(db, 'chat_history'), msg);
+            // Sanitize message to remove undefined values
+            const sanitizedMsg = { ...msg };
+            if (sanitizedMsg.image === undefined) delete sanitizedMsg.image;
+            if (sanitizedMsg.actionProposal === undefined) delete sanitizedMsg.actionProposal;
+            
+            await addDoc(collection(db, 'chat_history'), sanitizedMsg);
           } catch (error) {
             console.error("Error saving chat message:", error);
           }
@@ -220,18 +235,37 @@ const App: React.FC = () => {
     saveNewMessages();
   }, [aiMessages, historyLoaded]);
 
+  const handleAddCustomKnowledge = async (topic: string, content: string) => {
+    try {
+      await addDoc(collection(db, 'customKnowledge'), {
+        topic,
+        content,
+        updatedAt: new Date().toISOString(),
+        createdBy: 'AI Assistant'
+      });
+    } catch (error) {
+      console.error("Error adding custom knowledge:", error);
+    }
+  };
+
   const addLog = async (action: AuditLog['action'], details: string, targetId?: string, currentJobsSnapshot?: ProductionJob[]) => {
     const newLog: AuditLog = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: new Date().toISOString(),
       action,
-      user: 'Manager', // Mock user
+      user: currentUser ? currentUser.name : 'System',
       details,
       targetId,
       snapshot: currentJobsSnapshot || jobs // Save the snapshot of jobs
     };
+
+    // Sanitize to remove undefined values
+    const sanitizedLog = { ...newLog };
+    if (sanitizedLog.targetId === undefined) delete sanitizedLog.targetId;
+    if (sanitizedLog.snapshot === undefined) delete sanitizedLog.snapshot;
+
     try {
-      await setDoc(doc(db, 'logs', newLog.id), newLog);
+      await setDoc(doc(db, 'logs', newLog.id), sanitizedLog);
     } catch (error) {
       console.error("Error saving log to Firebase:", error);
     }
@@ -311,17 +345,17 @@ const App: React.FC = () => {
 
   const handleViewOrder = (job: ProductionJob) => {
     setViewingOrderJob(job);
-    setCurrentView('order-detail');
+    navigate('/order-detail');
   };
 
   const handlePrintHandover = (selectedJobs: ProductionJob[]) => {
     setHandoverJobs(selectedJobs);
-    setCurrentView('handover');
+    navigate('/handover');
   };
 
   const handlePrintTag = (job: ProductionJob) => {
     setTagJob(job);
-    setCurrentView('tag-print');
+    navigate('/tag-print');
   };
 
   const handleSaveJob = async (updatedJob: ProductionJob) => {
@@ -335,6 +369,25 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateActuals = async (jobId: string, actuals: number, reason?: string) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    const updatedJob = {
+      ...job,
+      actualProduction: (job.actualProduction || 0) + actuals,
+      remarks: reason ? `${job.remarks ? job.remarks + ' | ' : ''}${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}: ${reason}` : job.remarks
+    };
+
+    try {
+      await setDoc(doc(db, 'jobs', updatedJob.id), updatedJob);
+      const newJobs = jobs.map(j => j.id === updatedJob.id ? updatedJob : j);
+      addLog('UPDATE', `อัปเดตยอดผลิตงาน ${updatedJob.jobOrder} เพิ่ม ${actuals} ชิ้น${reason ? ` (${reason})` : ''}`, updatedJob.id, newJobs);
+    } catch (error) {
+      console.error("Error updating actuals in Firebase:", error);
+    }
+  };
+
   const handleCreateJob = async (newJob: ProductionJob) => {
     try {
       await setDoc(doc(db, 'jobs', newJob.id), newJob);
@@ -342,6 +395,19 @@ const App: React.FC = () => {
       addLog('CREATE', `สร้างงานผลิตใหม่ ${newJob.jobOrder} เครื่อง ${newJob.machineId}`, newJob.id, newJobs);
     } catch (error) {
       console.error("Error creating job in Firebase:", error);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      const jobToDelete = jobs.find(j => j.id === jobId);
+      if (!jobToDelete) return;
+      
+      await deleteDoc(doc(db, 'jobs', jobId));
+      const newJobs = jobs.filter(j => j.id !== jobId);
+      addLog('DELETE', `ลบงานผลิต ${jobToDelete.jobOrder}`, jobId, newJobs);
+    } catch (error) {
+      console.error("Error deleting job in Firebase:", error);
     }
   };
 
@@ -389,7 +455,7 @@ const App: React.FC = () => {
 
   const handleGenerateForm = (html: string, title: string) => {
     setCustomForm({ html, title });
-    setCurrentView('custom-form');
+    navigate('/custom-form');
     setIsAssistantOpen(false); // Close assistant to see the form
   };
 
@@ -462,31 +528,7 @@ const App: React.FC = () => {
     }
   };
 
-  // If in "Print/Order" detail mode, render that separately for full screen
-  if (currentView === 'order-detail' && viewingOrderJob) {
-    return <ProductionOrderPrint job={viewingOrderJob} onBack={() => setCurrentView('plan')} />;
-  }
-
-  if (currentView === 'plan-print') {
-    return <ProductionPlanPrint jobs={jobs} onBack={() => setCurrentView('plan')} />;
-  }
-
-  if (currentView === 'handover' && handoverJobs.length > 0) {
-    return <DocumentHandoverView jobs={handoverJobs} onBack={() => setCurrentView('list')} />;
-  }
-
-  if (currentView === 'tag-print' && tagJob) {
-    return <ProductTagPrint job={tagJob} onBack={() => setCurrentView('list')} />;
-  }
-
-  if (currentView === 'custom-form' && customForm) {
-    return <CustomFormView 
-      html={customForm.html} 
-      title={customForm.title} 
-      onBack={() => setCurrentView('form-templates')} 
-      onSave={!customForm.id ? () => handleSaveFormTemplate(customForm.html, customForm.title) : undefined}
-    />;
-  }
+  // Full screen views are handled by Routes
 
   const handleImportJobs = (importedJobs: Partial<ProductionJob>[]) => {
     const newJobs = importedJobs.map(job => ({
@@ -635,111 +677,31 @@ const App: React.FC = () => {
     }
   };
 
-  const renderContent = () => {
-    switch (currentView) {
-      case 'dashboard':
-        return (
-          <div className="space-y-6">
-            <DashboardStats data={jobs} downtimeLogs={downtimeLogs} />
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                    <TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />
-                </div>
-                <div className="lg:col-span-1">
-                     <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-full">
-                        <h3 className="font-bold text-slate-800 mb-4 font-kanit">แจ้งเตือนงานด่วน (Urgent)</h3>
-                        <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                            {jobs.filter(j => j.status === 'Delayed').length > 0 ? (
-                                jobs.filter(j => j.status === 'Delayed').map(job => (
-                                    <div 
-                                        key={job.id} 
-                                        className="p-3 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:bg-red-100 transition-colors"
-                                        onClick={() => handleViewOrder(job)}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <span className="font-bold text-red-700 text-sm">{job.machineId}</span>
-                                            <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full">ตกแผน</span>
-                                        </div>
-                                        <p className="text-sm font-medium text-slate-700 mt-1">{job.productItem}</p>
-                                        <p className="text-[10px] text-slate-500 mt-1">คลิกเพื่อดูใบสั่งผลิต</p>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="text-center py-8 text-slate-400 text-sm italic">
-                                    ไม่มีงานแจ้งเตือน ระบบปกติ
-                                </div>
-                            )}
-                        </div>
-                     </div>
-                </div>
-            </div>
-          </div>
-        );
-      case 'plan':
-        return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onImportJobs={handleImportJobs} onPrintPlan={() => setCurrentView('plan-print')} />;
-      case 'analysis':
-        return <ProductionAnalysis jobs={jobs} />;
-      case 'oee':
-        return <OEEDashboard jobs={jobs} downtimeLogs={downtimeLogs} machineCapabilities={MACHINE_MOLD_CAPABILITIES} />;
-      case 'schedule':
-        return <TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />;
-      case 'list':
-        return <JobTable jobs={jobs} onEditJob={handleEditJob} onPrintHandover={handlePrintHandover} onPrintTag={handlePrintTag} />;
-      case 'machines':
-        return <MachineGrid jobs={jobs} onEditJob={handleEditJob} />;
-      case 'inventory':
-        return <InventoryView 
-          inventory={inventory} 
-          boms={boms}
-          onImportInventory={handleImportInventory} 
-          onAddInventory={handleAddInventory}
-          onUpdateInventory={handleUpdateInventory}
-          onDeleteInventory={handleDeleteInventory}
-          onAddBom={handleAddBom}
-          onUpdateBom={handleUpdateBom}
-          onDeleteBom={handleDeleteBom}
-        />;
-      case 'master-data':
-        return <KnowledgeBase customKnowledge={customKnowledge} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />;
-      case 'history':
-        return <HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />;
-      case 'downtime-logs':
-        return <DowntimeLogsView logs={downtimeLogs} />;
-      case 'form-templates':
-        return <FormTemplatesView 
-          forms={formTemplates} 
-          onViewForm={(form) => {
-            setCustomForm({ html: form.html, title: form.title, id: form.id });
-            setCurrentView('custom-form');
-          }}
-          onDeleteForm={handleDeleteFormTemplate}
-          onSaveForm={handleSaveFormTemplate}
-        />;
-      case 'order-detail':
-        return viewingOrderJob ? <ProductionOrderPrint job={viewingOrderJob} onBack={() => setCurrentView('plan')} /> : null;
-      case 'handover':
-        return <DocumentHandoverView jobs={handoverJobs} onBack={() => setCurrentView('list')} />;
-      case 'tag-print':
-        return tagJob ? <ProductTagPrint job={tagJob} onBack={() => setCurrentView('list')} /> : null;
-      default:
-        return <ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onImportJobs={handleImportJobs} />;
-    }
-  };
+
 
   const handleViewChange = (view: string) => {
     if (view === 'import-plan') {
       setIsImportPlanModalOpen(true);
       if (currentView !== 'plan') {
-        setCurrentView('plan');
+        navigate('/plan');
       }
     } else {
-      setCurrentView(view);
+      navigate('/' + view);
     }
   };
 
+  const handleLogout = () => {
+    setCurrentUser(null);
+    navigate('/');
+  };
+
+  if (!currentUser) {
+    return <Login onLogin={setCurrentUser} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex font-kanit">
-      <Sidebar currentView={currentView} onChangeView={handleViewChange} />
+      <Sidebar currentView={currentView} onChangeView={handleViewChange} currentUser={currentUser} />
 
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 w-full bg-slate-900 text-white z-40 p-4 flex justify-between items-center shadow-md">
@@ -764,6 +726,13 @@ const App: React.FC = () => {
               className="bg-brand-500 hover:bg-brand-600 text-white p-1.5 rounded-lg transition-all shadow-sm"
             >
                 <Plus size={20} />
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="p-1.5 text-slate-300 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+              title="ออกจากระบบ"
+            >
+                <LogOut size={20} />
             </button>
         </div>
       </div>
@@ -796,11 +765,13 @@ const App: React.FC = () => {
                         { id: 'schedule', label: 'ไทม์ไลน์', icon: <Clock size={20} /> },
                         { id: 'list', label: 'รายการงานทั้งหมด', icon: <FileText size={20} /> },
                         { id: 'machines', label: 'สถานะเครื่องจักร', icon: <Cpu size={20} /> },
-                        { id: 'inventory', label: 'คลังวัตถุดิบ & BOM', icon: <Package size={20} /> },
+                        { id: 'inventory', label: 'สินค้าคงเหลือ (FG) & วัตถุดิบ', icon: <Package size={20} /> },
                         { id: 'master-data', label: 'ฐานข้อมูลหลัก', icon: <Settings size={20} /> },
                         { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
                         { id: 'history', label: 'ประวัติการทำงาน', icon: <History size={20} /> },
-                    ].map(item => (
+                    ]
+                    .concat(currentUser.role === 'admin' ? [{ id: 'users', label: 'จัดการผู้ใช้งาน', icon: <Users size={20} /> }] as any[] : [])
+                    .map(item => (
                         <button 
                             key={item.id}
                             onClick={() => { handleViewChange(item.id); setMobileMenuOpen(false); }} 
@@ -858,15 +829,16 @@ const App: React.FC = () => {
                      currentView === 'analysis' ? 'วิเคราะห์การผลิต (Production Analysis)' :
                      currentView === 'schedule' ? 'ตารางไทม์ไลน์ (Timeline)' :
                      currentView === 'list' ? 'รายการงานทั้งหมด (Job List)' :
-                     currentView === 'inventory' ? 'คลังวัตถุดิบ & สูตรผลิต (Inventory & BOM)' :
+                     currentView === 'inventory' ? 'สินค้าคงเหลือ (FG) & วัตถุดิบ' :
                      currentView === 'history' ? 'ประวัติการทำงาน (History Log)' :
                      currentView === 'tag-print' ? 'พิมพ์สติกเกอร์ (Print Tags)' :
                      currentView === 'custom-form' ? customForm?.title || 'เอกสาร' :
                      currentView === 'form-templates' ? 'แบบฟอร์มเอกสาร (Form Templates)' :
                      currentView === 'master-data' ? 'ฐานข้อมูลหลัก (Master Data)' :
-                     currentView === 'machines' ? 'สถานะเครื่องจักร' : 'ตั้งค่า'}
+                     currentView === 'machines' ? 'สถานะเครื่องจักร' : 
+                     currentView === 'users' ? 'จัดการผู้ใช้งาน' : 'ตั้งค่า'}
                 </h1>
-                <p className="text-slate-500 text-sm hidden md:block">ยินดีต้อนรับ ผู้จัดการฝ่ายวางแผนการผลิต</p>
+                <p className="text-slate-500 text-sm hidden md:block">ยินดีต้อนรับ {currentUser.name} ({currentUser.role})</p>
             </div>
             <div className="hidden md:flex items-center gap-4 relative">
                 <button 
@@ -885,10 +857,103 @@ const App: React.FC = () => {
                 >
                     <Plus size={18} /> เพิ่มรายการผลิตใหม่
                 </button>
+
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                  title="ออกจากระบบ"
+                >
+                  <LogOut size={24} />
+                </button>
             </div>
         </header>
 
-        {renderContent()}
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={
+            <div className="space-y-6">
+              <DashboardStats data={jobs} downtimeLogs={downtimeLogs} />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                      <TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />
+                  </div>
+                  <div className="lg:col-span-1">
+                       <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-full">
+                          <h3 className="font-bold text-slate-800 mb-4 font-kanit">แจ้งเตือนงานด่วน (Urgent)</h3>
+                          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                              {jobs.filter(j => j.status === 'Delayed').length > 0 ? (
+                                  jobs.filter(j => j.status === 'Delayed').map(job => (
+                                      <div 
+                                          key={job.id} 
+                                          className="p-3 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:bg-red-100 transition-colors"
+                                          onClick={() => handleViewOrder(job)}
+                                      >
+                                          <div className="flex justify-between items-start">
+                                              <span className="font-bold text-red-700 text-sm">{job.machineId}</span>
+                                              <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full">ตกแผน</span>
+                                          </div>
+                                          <p className="text-sm font-medium text-slate-700 mt-1">{job.productItem}</p>
+                                          <p className="text-[10px] text-slate-500 mt-1">คลิกเพื่อดูใบสั่งผลิต</p>
+                                      </div>
+                                  ))
+                              ) : (
+                                  <div className="text-center py-8 text-slate-400 text-sm italic">
+                                      ไม่มีงานแจ้งเตือน ระบบปกติ
+                                  </div>
+                              )}
+                          </div>
+                       </div>
+                  </div>
+              </div>
+            </div>
+          } />
+          <Route path="/plan" element={<ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} />} />
+          <Route path="/plan-vs-actual" element={<PlanVsActualDashboard jobs={jobs} onUpdateActuals={handleUpdateActuals} />} />
+          <Route path="/analysis" element={<ProductionAnalysis jobs={jobs} />} />
+          <Route path="/oee" element={<OEEDashboard jobs={jobs} downtimeLogs={downtimeLogs} machineCapabilities={MACHINE_MOLD_CAPABILITIES} />} />
+          <Route path="/schedule" element={<TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />} />
+          <Route path="/list" element={<JobTable jobs={jobs} onEditJob={handleEditJob} onPrintHandover={handlePrintHandover} onPrintTag={handlePrintTag} onViewOrder={handleViewOrder} />} />
+          <Route path="/machines" element={<MachineGrid jobs={jobs} onEditJob={handleEditJob} />} />
+          <Route path="/inventory" element={
+            <InventoryView 
+              inventory={inventory} 
+              boms={boms}
+              onImportInventory={handleImportInventory} 
+              onAddInventory={handleAddInventory}
+              onUpdateInventory={handleUpdateInventory}
+              onDeleteInventory={handleDeleteInventory}
+              onAddBom={handleAddBom}
+              onUpdateBom={handleUpdateBom}
+              onDeleteBom={handleDeleteBom}
+            />
+          } />
+          <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
+          <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />} />
+          <Route path="/downtime-logs" element={<DowntimeLogsView logs={downtimeLogs} />} />
+          <Route path="/form-templates" element={
+            <FormTemplatesView 
+              forms={formTemplates} 
+              onViewForm={(form) => {
+                setCustomForm({ html: form.html, title: form.title, id: form.id });
+                navigate('/custom-form');
+              }}
+              onDeleteForm={handleDeleteFormTemplate}
+              onSaveForm={handleSaveFormTemplate}
+            />
+          } />
+          <Route path="/order-detail" element={viewingOrderJob ? <ProductionOrderPrint job={viewingOrderJob} onBack={() => navigate('/plan')} /> : <Navigate to="/plan" />} />
+          <Route path="/plan-print" element={<ProductionPlanPrint jobs={jobs} onBack={() => navigate('/plan')} />} />
+          <Route path="/handover" element={handoverJobs.length > 0 ? <DocumentHandoverView jobs={handoverJobs} onBack={() => navigate('/list')} /> : <Navigate to="/list" />} />
+          <Route path="/tag-print" element={tagJob ? <ProductTagPrint job={tagJob} onBack={() => navigate('/list')} /> : <Navigate to="/list" />} />
+          <Route path="/custom-form" element={customForm ? <CustomFormView 
+              html={customForm.html} 
+              title={customForm.title} 
+              onBack={() => navigate('/form-templates')} 
+              onSave={!customForm.id ? () => handleSaveFormTemplate(customForm.html, customForm.title) : undefined}
+            /> : <Navigate to="/form-templates" />} />
+          <Route path="/users" element={<UserManagement />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
 
         <button 
           onClick={() => setIsAssistantOpen(true)}
@@ -912,9 +977,22 @@ const App: React.FC = () => {
         downtimeLogs={downtimeLogs}
         onUpdateJob={handleSaveJob}
         onCreateJob={handleCreateJob}
+        onDeleteJob={handleDeleteJob}
+        onUpdateActuals={handleUpdateActuals}
         onBatchUpsert={handleBatchUpsert}
         onGenerateForm={handleGenerateForm}
         onLogDowntime={handleLogDowntime}
+        onAddKnowledge={handleAddCustomKnowledge}
+        onAddBom={handleAddBom}
+        onUpdateBom={handleUpdateBom}
+        onDeleteBom={handleDeleteBom}
+        onAddInventory={handleAddInventory}
+        onUpdateInventory={handleUpdateInventory}
+        onDeleteInventory={handleDeleteInventory}
+        onChangeView={handleViewChange}
+        onPrintTag={(jobOrder) => { const job = jobs.find(j => j.jobOrder === jobOrder); if(job) handlePrintTag(job); }}
+        onPrintHandover={(jobOrders) => { const selected = jobs.filter(j => jobOrders.includes(j.jobOrder)); if(selected.length) handlePrintHandover(selected); }}
+        onOpenImportModal={() => setIsImportPlanModalOpen(true)}
         messages={aiMessages}
         setMessages={setAiMessages}
       />
