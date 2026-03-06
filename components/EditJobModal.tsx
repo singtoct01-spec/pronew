@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { ProductionJob, Status, RawMaterial, MOCK_BOMS, MOCK_INVENTORY, PRODUCT_SPECS, ProductBOM } from '../types';
+import { ProductionJob, Status, RawMaterial, PRODUCT_SPECS, ProductBOM, InventoryItem } from '../types';
 import { X, Save, AlertCircle, Calendar, Plus, Trash2, Wand2, Ruler, Flame, GitCommit, PauseCircle, CheckCircle2 } from 'lucide-react';
 
 interface EditJobModalProps {
   isOpen: boolean;
   onClose: () => void;
   job: ProductionJob | null;
+  inventory: InventoryItem[];
+  boms: ProductBOM[];
   onSave: (updatedJob: ProductionJob) => void;
 }
 
-export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job, onSave }) => {
+export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job, inventory, boms, onSave }) => {
   const [formData, setFormData] = useState<Partial<ProductionJob>>({
     status: 'Running',
     productItem: '',
@@ -88,12 +90,12 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
 
     let bom: ProductBOM | undefined;
     for (const term of searchTerms) {
-        bom = MOCK_BOMS.find(b => b.productItem.toLowerCase() === term); 
+        bom = boms.find(b => b.productItem.toLowerCase() === term); 
         if (bom) break;
     }
     
     if (!bom) {
-         bom = MOCK_BOMS.find(b => b.productItem.toLowerCase().includes(product.toLowerCase()));
+         bom = boms.find(b => b.productItem.toLowerCase().includes(product.toLowerCase()));
     }
 
     if (!bom) {
@@ -107,7 +109,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
     }
 
     const newMaterials: RawMaterial[] = bom.materials.map(mat => {
-      const inventoryItem = MOCK_INVENTORY.find(i => i.id === mat.inventoryItemId);
+      const inventoryItem = inventory.find(i => i.id === mat.inventoryItemId);
       const totalQty = mat.qtyPerUnit * (formData.totalProduction || 0);
 
       return {
@@ -348,7 +350,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
             <div className="space-y-2">
               {formData.materials?.map((m, idx) => {
                 // Check Stock Status
-                const inventoryItem = m.inventoryItemId ? MOCK_INVENTORY.find(i => i.id === m.inventoryItemId) : null;
+                const inventoryItem = m.inventoryItemId ? inventory.find(i => i.id === m.inventoryItemId) : null;
                 const requiredQty = m.qtyPcs > 0 ? m.qtyPcs : m.qtyKg;
                 const currentStock = inventoryItem ? inventoryItem.currentStock : 0;
                 const isShortage = inventoryItem && currentStock < requiredQty;

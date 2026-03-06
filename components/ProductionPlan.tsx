@@ -2,7 +2,7 @@
 
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ProductionJob, Status, SIMULATED_NOW, MOCK_INVENTORY, MOCK_BOMS, sortMachines } from '../types';
+import { ProductionJob, Status, SIMULATED_NOW, sortMachines, InventoryItem, ProductBOM } from '../types';
 import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download, Upload, Tag, Share } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -10,6 +10,8 @@ import * as XLSX from 'xlsx';
 
 interface ProductionPlanProps {
   jobs: ProductionJob[];
+  inventory: InventoryItem[];
+  boms: ProductBOM[];
   onEditJob: (job: ProductionJob) => void;
   onViewOrder: (job: ProductionJob) => void;
   onPrintTag?: (job: ProductionJob) => void;
@@ -19,7 +21,7 @@ interface ProductionPlanProps {
   onOpenImportModal?: () => void;
 }
 
-export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob, onViewOrder, onPrintTag, onPrintHandover, onImportJobs, onPrintPlan, onOpenImportModal }) => {
+export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory, boms, onEditJob, onViewOrder, onPrintTag, onPrintHandover, onImportJobs, onPrintPlan, onOpenImportModal }) => {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -212,7 +214,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
     if (job.materials && job.materials.length > 0) {
         for (const mat of job.materials) {
             if (mat.inventoryItemId) {
-                const item = MOCK_INVENTORY.find(i => i.id === mat.inventoryItemId);
+                const item = inventory.find(i => i.id === mat.inventoryItemId);
                 const required = mat.qtyPcs > 0 ? mat.qtyPcs : mat.qtyKg;
                 if (item && item.currentStock < required) return { status: 'Shortage', item: item.name };
             }
@@ -221,11 +223,11 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, onEditJob,
     }
 
     // 2. If no materials, try to find BOM
-    const bom = MOCK_BOMS.find(b => job.productItem.toLowerCase().includes(b.productItem.toLowerCase()) || b.productItem.toLowerCase().includes(job.productItem.toLowerCase()));
+    const bom = boms.find(b => job.productItem.toLowerCase().includes(b.productItem.toLowerCase()) || b.productItem.toLowerCase().includes(job.productItem.toLowerCase()));
     
     if (bom) {
         for (const mat of bom.materials) {
-            const item = MOCK_INVENTORY.find(i => i.id === mat.inventoryItemId);
+            const item = inventory.find(i => i.id === mat.inventoryItemId);
             if (item) {
                 const totalQty = mat.qtyPerUnit * (job.totalProduction || 0);
                 if (item.currentStock < totalQty) {

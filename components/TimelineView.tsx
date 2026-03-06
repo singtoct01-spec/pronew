@@ -112,6 +112,42 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
     }
   };
 
+  // View & Snap State
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
+  const [snapMode, setSnapMode] = useState<'free' | 'hour' | 'half-day' | 'day'>('hour');
+
+  const getMinWidth = () => {
+    switch (viewMode) {
+      case 'day': return `${Math.max(1000, totalDays * 240)}px`;
+      case 'week': return `${Math.max(1000, totalDays * 120)}px`;
+      case 'month': return `${Math.max(1000, totalDays * 40)}px`;
+      default: return '1000px';
+    }
+  };
+
+  const snapDate = (date: Date, mode: 'free' | 'hour' | 'half-day' | 'day') => {
+    if (mode === 'free') return date;
+    const d = new Date(date);
+    if (mode === 'hour') {
+      const minutes = d.getMinutes();
+      if (minutes >= 30) d.setHours(d.getHours() + 1);
+      d.setMinutes(0, 0, 0);
+    } else if (mode === 'half-day') {
+      const hours = d.getHours();
+      if (hours < 6) d.setHours(0, 0, 0, 0);
+      else if (hours < 18) d.setHours(12, 0, 0, 0);
+      else {
+        d.setDate(d.getDate() + 1);
+        d.setHours(0, 0, 0, 0);
+      }
+    } else if (mode === 'day') {
+      const hours = d.getHours();
+      if (hours >= 12) d.setDate(d.getDate() + 1);
+      d.setHours(0, 0, 0, 0);
+    }
+    return d;
+  };
+
   // Drag & Drop State
   const timelineRef = useRef<HTMLDivElement>(null);
   const [dragState, setDragState] = useState<{
@@ -143,11 +179,44 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
       if (dragState.type === 'move') {
         newLeft = Math.max(0, Math.min(100 - newWidth, dragState.startLeft + deltaPercentage));
       } else if (dragState.type === 'resize-left') {
-        const maxLeft = dragState.startLeft + dragState.startWidth - 1; // Minimum width 1%
+        const maxLeft = dragState.startLeft + dragState.startWidth;
         newLeft = Math.max(0, Math.min(maxLeft, dragState.startLeft + deltaPercentage));
         newWidth = dragState.startWidth + (dragState.startLeft - newLeft);
       } else if (dragState.type === 'resize-right') {
-        newWidth = Math.max(1, Math.min(100 - dragState.startLeft, dragState.startWidth + deltaPercentage));
+        newWidth = Math.max(0, Math.min(100 - dragState.startLeft, dragState.startWidth + deltaPercentage));
+      }
+
+      // Apply snapping
+      if (snapMode !== 'free') {
+        if (dragState.type === 'move') {
+          const rawStartDate = getDateFromPercentage(newLeft);
+          const snappedStartDate = snapDate(rawStartDate, snapMode);
+          newLeft = getPosition(snappedStartDate.toISOString());
+        } else if (dragState.type === 'resize-left') {
+          const rawStartDate = getDateFromPercentage(newLeft);
+          const snappedStartDate = snapDate(rawStartDate, snapMode);
+          const snappedLeft = getPosition(snappedStartDate.toISOString());
+          
+          const rightEdge = dragState.startLeft + dragState.startWidth;
+          if (snappedLeft < rightEdge) {
+            newLeft = snappedLeft;
+            newWidth = rightEdge - newLeft;
+          }
+        } else if (dragState.type === 'resize-right') {
+          const rawEndDate = getDateFromPercentage(dragState.startLeft + newWidth);
+          const snappedEndDate = snapDate(rawEndDate, snapMode);
+          const snappedRight = getPosition(snappedEndDate.toISOString());
+          
+          if (snappedRight > dragState.startLeft) {
+            newWidth = snappedRight - dragState.startLeft;
+          }
+        }
+      }
+
+      // Ensure minimum width (e.g., 1 hour)
+      if (newWidth <= 0) {
+          const minWidthDate = new Date(getDateFromPercentage(newLeft).getTime() + 60 * 60 * 1000);
+          newWidth = getPosition(minWidthDate.toISOString()) - newLeft;
       }
 
       setDragState(prev => prev ? { ...prev, currentLeft: newLeft, currentWidth: newWidth } : null);
@@ -241,6 +310,43 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
         </div>
         
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+          {/* View Mode */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button 
+              onClick={() => setViewMode('day')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'day' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              รายวัน
+            </button>
+            <button 
+              onClick={() => setViewMode('week')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'week' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              รายสัปดาห์
+            </button>
+            <button 
+              onClick={() => setViewMode('month')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'month' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              รายเดือน
+            </button>
+          </div>
+
+          {/* Snap Mode */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-xs text-slate-500">Snap:</span>
+            <select 
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              value={snapMode}
+              onChange={(e) => setSnapMode(e.target.value as any)}
+            >
+              <option value="free">อิสระ (Free)</option>
+              <option value="hour">รายชั่วโมง (Hour)</option>
+              <option value="half-day">ครึ่งวัน (Half-day)</option>
+              <option value="day">เต็มวัน (Day)</option>
+            </select>
+          </div>
+
           {/* Search */}
           <div className="relative w-full sm:w-48">
             <Search className="absolute left-2.5 top-2 text-slate-400" size={16} />
@@ -279,7 +385,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
       </div>
 
       <div className="overflow-x-auto relative flex-1">
-        <div className="min-w-[1000px] pb-4">
+        <div className="pb-4" style={{ minWidth: getMinWidth() }}>
             {/* Header Dates */}
             <div className="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-20 h-10 shadow-sm">
                 <div className="w-24 flex-shrink-0 p-2 text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-100 sticky left-0 z-30 shadow-r">

@@ -1,15 +1,17 @@
 
 import React, { useState } from 'react';
-import { MACHINE_MOLD_CAPABILITIES, PRODUCT_SPECS, MOCK_BOMS, MOCK_INVENTORY, CustomKnowledge } from '../types';
+import { MACHINE_MOLD_CAPABILITIES, PRODUCT_SPECS, CustomKnowledge, InventoryItem, ProductBOM } from '../types';
 import { Search, Database, Disc, Settings, Weight, Package, Layers, Info, Box, BookOpen, Plus, Trash2 } from 'lucide-react';
 
 interface KnowledgeBaseProps {
   customKnowledge: CustomKnowledge[];
+  inventory: InventoryItem[];
+  boms: ProductBOM[];
   onSaveKnowledge: (knowledge: Omit<CustomKnowledge, 'id' | 'updatedAt'>, id?: string) => void;
   onDeleteKnowledge: (id: string) => void;
 }
 
-export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, onSaveKnowledge, onDeleteKnowledge }) => {
+export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, inventory, boms, onSaveKnowledge, onDeleteKnowledge }) => {
   const [activeTab, setActiveTab] = useState<'products' | 'machines' | 'boms' | 'packaging' | 'custom'>('products');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -27,7 +29,7 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, o
     m.moldName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredBoms = MOCK_BOMS.filter(b => 
+  const filteredBoms = boms.filter(b => 
     b.productItem.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -245,7 +247,7 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, o
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {bom.materials.map((mat, mIdx) => {
-                            const item = MOCK_INVENTORY.find(i => i.id === mat.inventoryItemId);
+                            const item = inventory.find(i => i.id === mat.inventoryItemId);
                             return (
                                 <div key={mIdx} className="bg-white border border-slate-200 p-2 rounded-lg flex justify-between items-center text-sm shadow-sm">
                                     <div className="flex flex-col">

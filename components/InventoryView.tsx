@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { InventoryItem, ProductBOM, MOCK_INVENTORY, MOCK_BOMS } from '../types';
+import { InventoryItem, ProductBOM } from '../types';
 import { Search, Package, AlertTriangle, Layers, Filter, Upload, FileDown, Plus, Edit2, Trash2, CheckCircle2, ArrowRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { InventoryItemModal } from './InventoryItemModal';
@@ -477,7 +477,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     
                     <div className="space-y-2">
                       {bom.materials.map((mat, mIdx) => {
-                        const invItem = inventory.find(i => i.id === mat.inventoryItemId) || MOCK_INVENTORY.find(i => i.id === mat.inventoryItemId);
+                        const invItem = inventory.find(i => i.id === mat.inventoryItemId);
                         return (
                           <div key={mIdx} className="flex justify-between items-center bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
                              <div className="flex items-center gap-3">

@@ -2,18 +2,20 @@
 
 
 import React, { useState } from 'react';
-import { ProductionJob, Status, MOCK_INVENTORY, MOCK_BOMS } from '../types';
+import { ProductionJob, Status, InventoryItem, ProductBOM } from '../types';
 import { Search, Filter, AlertTriangle, Pencil, Flame, Zap, PauseCircle, CalendarClock, FileText, CheckSquare, Square, Printer, Tag, AlertOctagon, Edit2 } from 'lucide-react';
 
 interface JobTableProps {
   jobs: ProductionJob[];
+  inventory: InventoryItem[];
+  boms: ProductBOM[];
   onEditJob: (job: ProductionJob) => void;
   onPrintHandover?: (selectedJobs: ProductionJob[]) => void;
   onPrintTag?: (job: ProductionJob) => void;
   onViewOrder?: (job: ProductionJob) => void;
 }
 
-export const JobTable: React.FC<JobTableProps> = ({ jobs, onEditJob, onPrintHandover, onPrintTag, onViewOrder }) => {
+export const JobTable: React.FC<JobTableProps> = ({ jobs, inventory, boms, onEditJob, onPrintHandover, onPrintTag, onViewOrder }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
@@ -23,7 +25,7 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, onEditJob, onPrintHand
     if (job.materials && job.materials.length > 0) {
         for (const mat of job.materials) {
             if (mat.inventoryItemId) {
-                const item = MOCK_INVENTORY.find(i => i.id === mat.inventoryItemId);
+                const item = inventory.find(i => i.id === mat.inventoryItemId);
                 const required = mat.qtyPcs > 0 ? mat.qtyPcs : mat.qtyKg;
                 if (item && item.currentStock < required) return { status: 'Shortage', item: item.name };
             }
@@ -32,11 +34,11 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, onEditJob, onPrintHand
     }
 
     // 2. If no materials, try to find BOM
-    const bom = MOCK_BOMS.find(b => job.productItem.toLowerCase().includes(b.productItem.toLowerCase()) || b.productItem.toLowerCase().includes(job.productItem.toLowerCase()));
+    const bom = boms.find(b => job.productItem.toLowerCase().includes(b.productItem.toLowerCase()) || b.productItem.toLowerCase().includes(job.productItem.toLowerCase()));
     
     if (bom) {
         for (const mat of bom.materials) {
-            const item = MOCK_INVENTORY.find(i => i.id === mat.inventoryItemId);
+            const item = inventory.find(i => i.id === mat.inventoryItemId);
             if (item) {
                 const totalQty = mat.qtyPerUnit * (job.totalProduction || 0);
                 if (item.currentStock < totalQty) {

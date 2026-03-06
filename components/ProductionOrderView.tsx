@@ -1,13 +1,15 @@
 import React from 'react';
-import { ProductionJob, MOCK_BOMS, MOCK_INVENTORY } from '../types';
+import { ProductionJob, ProductBOM, InventoryItem } from '../types';
 import { Printer, ChevronLeft, Download } from 'lucide-react';
 
 interface ProductionOrderViewProps {
   job: ProductionJob;
+  boms: ProductBOM[];
+  inventory: InventoryItem[];
   onBack: () => void;
 }
 
-export const ProductionOrderView: React.FC<ProductionOrderViewProps> = ({ job, onBack }) => {
+export const ProductionOrderView: React.FC<ProductionOrderViewProps> = ({ job, boms, inventory, onBack }) => {
   const handlePrint = () => {
     window.print();
   };
@@ -18,7 +20,7 @@ export const ProductionOrderView: React.FC<ProductionOrderViewProps> = ({ job, o
   const isPreform = job.productType?.toLowerCase().includes('preform') || job.productItem.toLowerCase().includes('preform');
 
   // Helper to find BOM for raw material calculation (Mock logic for display)
-  const bom = MOCK_BOMS.find(b => job.productItem.includes(b.productItem));
+  const bom = boms.find(b => job.productItem.includes(b.productItem));
   
   // Format Date Helper
   const fmtDate = (d: string) => {

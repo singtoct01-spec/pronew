@@ -29,7 +29,7 @@ import { GoogleSheetsImportModal } from './components/GoogleSheetsImportModal';
 import { PlanVsActualDashboard } from './components/PlanVsActualDashboard';
 import { Login } from './components/Login';
 import { UserManagement } from './components/UserManagement';
-import { MOCK_DATA, ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM, AppUser } from './types';
+import { ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM, AppUser } from './types';
 import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X, LogOut, Users } from 'lucide-react';
 
 export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users';
@@ -296,7 +296,7 @@ const App: React.FC = () => {
     });
 
     // 2. Check Material Shortage (Simulate "running out in 2 hours")
-    MOCK_INVENTORY.forEach(item => {
+    inventory.forEach(item => {
       if (item.currentStock <= item.minStock) {
         generatedAlerts.push({
            id: `inv-${item.id}`,
@@ -382,7 +382,42 @@ const App: React.FC = () => {
     try {
       await setDoc(doc(db, 'jobs', updatedJob.id), updatedJob);
       const newJobs = jobs.map(j => j.id === updatedJob.id ? updatedJob : j);
-      addLog('UPDATE', `อัปเดตยอดผลิตงาน ${updatedJob.jobOrder} เพิ่ม ${actuals} ชิ้น${reason ? ` (${reason})` : ''}`, updatedJob.id, newJobs);
+      
+      // Update inventory (Deduct RM, Add FG)
+      const bom = boms.find(b => b.productItem === job.productItem);
+      let updatedInventory = [...inventory];
+      const inventoryUpdates: Promise<void>[] = [];
+
+      if (bom) {
+        // Deduct raw materials
+        bom.materials.forEach(material => {
+          const invItemIndex = updatedInventory.findIndex(i => i.id === material.inventoryItemId);
+          if (invItemIndex !== -1) {
+            const invItem = updatedInventory[invItemIndex];
+            const deduction = actuals * material.qtyPerUnit;
+            const newStock = Math.max(0, invItem.currentStock - deduction);
+            const updatedInvItem = { ...invItem, currentStock: newStock };
+            updatedInventory[invItemIndex] = updatedInvItem;
+            inventoryUpdates.push(setDoc(doc(db, 'inventory', updatedInvItem.id), updatedInvItem));
+          }
+        });
+      }
+
+      // Add finished goods
+      const fgItemIndex = updatedInventory.findIndex(i => i.code === job.productItem || i.name === job.productItem);
+      if (fgItemIndex !== -1) {
+         const fgItem = updatedInventory[fgItemIndex];
+         const updatedFgItem = { ...fgItem, currentStock: fgItem.currentStock + actuals };
+         updatedInventory[fgItemIndex] = updatedFgItem;
+         inventoryUpdates.push(setDoc(doc(db, 'inventory', updatedFgItem.id), updatedFgItem));
+      }
+
+      if (inventoryUpdates.length > 0) {
+        await Promise.all(inventoryUpdates);
+        setInventory(updatedInventory);
+      }
+
+      addLog('UPDATE', `อัปเดตยอดผลิตงาน ${updatedJob.jobOrder} เพิ่ม ${actuals} ชิ้น${reason ? ` (${reason})` : ''} (ตัดสต็อกอัตโนมัติ)`, updatedJob.id, newJobs);
     } catch (error) {
       console.error("Error updating actuals in Firebase:", error);
     }
@@ -907,12 +942,12 @@ const App: React.FC = () => {
               </div>
             </div>
           } />
-          <Route path="/plan" element={<ProductionPlan jobs={jobs} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} />} />
+          <Route path="/plan" element={<ProductionPlan jobs={jobs} inventory={inventory} boms={boms} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} />} />
           <Route path="/plan-vs-actual" element={<PlanVsActualDashboard jobs={jobs} onUpdateActuals={handleUpdateActuals} />} />
           <Route path="/analysis" element={<ProductionAnalysis jobs={jobs} />} />
           <Route path="/oee" element={<OEEDashboard jobs={jobs} downtimeLogs={downtimeLogs} machineCapabilities={MACHINE_MOLD_CAPABILITIES} />} />
           <Route path="/schedule" element={<TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />} />
-          <Route path="/list" element={<JobTable jobs={jobs} onEditJob={handleEditJob} onPrintHandover={handlePrintHandover} onPrintTag={handlePrintTag} onViewOrder={handleViewOrder} />} />
+          <Route path="/list" element={<JobTable jobs={jobs} inventory={inventory} boms={boms} onEditJob={handleEditJob} onPrintHandover={handlePrintHandover} onPrintTag={handlePrintTag} onViewOrder={handleViewOrder} />} />
           <Route path="/machines" element={<MachineGrid jobs={jobs} onEditJob={handleEditJob} />} />
           <Route path="/inventory" element={
             <InventoryView 
@@ -927,7 +962,7 @@ const App: React.FC = () => {
               onDeleteBom={handleDeleteBom}
             />
           } />
-          <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
+          <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
           <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />} />
           <Route path="/downtime-logs" element={<DowntimeLogsView logs={downtimeLogs} />} />
           <Route path="/form-templates" element={
@@ -968,8 +1003,8 @@ const App: React.FC = () => {
         isOpen={isAssistantOpen} 
         onClose={() => setIsAssistantOpen(false)}
         jobs={jobs}
-        inventory={MOCK_INVENTORY}
-        boms={MOCK_BOMS}
+        inventory={inventory}
+        boms={boms}
         specs={PRODUCT_SPECS}
         machineCapabilities={MACHINE_MOLD_CAPABILITIES}
         formTemplates={formTemplates}
@@ -1000,7 +1035,9 @@ const App: React.FC = () => {
       <EditJobModal 
         isOpen={isModalOpen} 
         onClose={() => { setIsModalOpen(false); setEditingJob(null); }} 
-        job={editingJob} 
+        job={editingJob}
+        inventory={inventory}
+        boms={boms}
         onSave={handleSaveJob} 
       />
 
