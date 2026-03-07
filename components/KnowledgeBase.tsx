@@ -1,17 +1,19 @@
 
 import React, { useState } from 'react';
-import { MACHINE_MOLD_CAPABILITIES, PRODUCT_SPECS, CustomKnowledge, InventoryItem, ProductBOM } from '../types';
+import { CustomKnowledge, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability } from '../types';
 import { Search, Database, Disc, Settings, Weight, Package, Layers, Info, Box, BookOpen, Plus, Trash2 } from 'lucide-react';
 
 interface KnowledgeBaseProps {
   customKnowledge: CustomKnowledge[];
   inventory: InventoryItem[];
   boms: ProductBOM[];
+  productSpecs: ProductSpec[];
+  machineCapabilities: MachineMoldCapability[];
   onSaveKnowledge: (knowledge: Omit<CustomKnowledge, 'id' | 'updatedAt'>, id?: string) => void;
   onDeleteKnowledge: (id: string) => void;
 }
 
-export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, inventory, boms, onSaveKnowledge, onDeleteKnowledge }) => {
+export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, inventory, boms, productSpecs, machineCapabilities, onSaveKnowledge, onDeleteKnowledge }) => {
   const [activeTab, setActiveTab] = useState<'products' | 'machines' | 'boms' | 'packaging' | 'custom'>('products');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -19,12 +21,12 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
   const [newTopic, setNewTopic] = useState('');
   const [newContent, setNewContent] = useState('');
 
-  const filteredProducts = PRODUCT_SPECS.filter(p => 
+  const filteredProducts = productSpecs.filter(p => 
     p.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredMachines = MACHINE_MOLD_CAPABILITIES.filter(m =>
+  const filteredMachines = machineCapabilities.filter(m =>
     m.machineGroup.toLowerCase().includes(searchTerm.toLowerCase()) ||
     m.moldName.toLowerCase().includes(searchTerm.toLowerCase())
   );

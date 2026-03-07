@@ -1,16 +1,17 @@
 
 import React, { useState } from 'react';
-import { ProductionJob, PRODUCT_SPECS } from '../types';
+import { ProductionJob, ProductSpec } from '../types';
 import { ChevronLeft, Printer, Minus, Plus, Settings, Grid, LayoutGrid, Square } from 'lucide-react';
 
 interface ProductTagViewProps {
   job: ProductionJob;
+  productSpecs: ProductSpec[];
   onBack: () => void;
 }
 
 type LayoutType = '2-up' | '4-up' | '8-up' | '12-up';
 
-export const ProductTagView: React.FC<ProductTagViewProps> = ({ job, onBack }) => {
+export const ProductTagView: React.FC<ProductTagViewProps> = ({ job, productSpecs, onBack }) => {
   const [qtyPerPack, setQtyPerPack] = useState<number>(100); 
   const [numberOfTags, setNumberOfTags] = useState<number>(8); // Default to 8 (1 full page of 8-up)
   const [layout, setLayout] = useState<LayoutType>('8-up'); // Default layout
@@ -21,7 +22,7 @@ export const ProductTagView: React.FC<ProductTagViewProps> = ({ job, onBack }) =
   };
 
   // Logic to find material from specs
-  const spec = PRODUCT_SPECS.find(s => job.productItem.includes(s.code));
+  const spec = productSpecs.find(s => job.productItem.includes(s.code));
   const material = spec ? spec.material : 'PP'; 
 
   const bomString = `${job.jobOrder} ${job.moldCode} ${job.color !== '-' ? job.color : ''}`;

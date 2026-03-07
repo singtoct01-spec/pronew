@@ -878,12 +878,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         );
 
         if (targetJob) {
-          const updatedJob = { ...targetJob, ...item };
+          const updatedJob = { ...targetJob, ...item, id: targetJob.id };
           batchJobs.push(updatedJob);
           updated++;
         } else {
           const newJob: ProductionJob = {
-             id: `new-${Date.now()}-${index}`,
              machineId: item.machineId || 'Unknown',
              productItem: item.productItem || 'New Item',
              moldCode: item.moldCode || '-',
@@ -895,7 +894,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
              startDate: item.startDate || SIMULATED_NOW.toISOString(),
              endDate: item.endDate || SIMULATED_NOW.toISOString(),
              status: item.status || 'Running',
-             ...item
+             ...item,
+             id: item.id || `new-${Date.now()}-${index}`
           };
           batchJobs.push(newJob);
           created++;

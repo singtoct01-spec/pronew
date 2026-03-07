@@ -16,7 +16,7 @@ import { EditJobModal } from './components/EditJobModal';
 import { SmartAssistant } from './components/SmartAssistant';
 import { ProductionOrderPrint } from './components/ProductionOrderPrint';
 import { DocumentHandoverView } from './components/DocumentHandoverView';
-import { ProductTagPrint } from './components/ProductTagPrint';
+import { ProductTagView } from './components/ProductTagView';
 import { InventoryView } from './components/InventoryView';
 import { HistoryLog } from './components/HistoryLog';
 import { KnowledgeBase } from './components/KnowledgeBase';
@@ -48,6 +48,8 @@ const App: React.FC = () => {
   const [jobs, setJobs] = useState<ProductionJob[]>([]);
   const [inventory, setInventory] = useState(MOCK_INVENTORY);
   const [boms, setBoms] = useState(MOCK_BOMS);
+  const [productSpecs, setProductSpecs] = useState(PRODUCT_SPECS);
+  const [machineCapabilities, setMachineCapabilities] = useState(MACHINE_MOLD_CAPABILITIES);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportPlanModalOpen, setIsImportPlanModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ProductionJob | null>(null);
@@ -134,6 +136,30 @@ const App: React.FC = () => {
       console.error("Error fetching boms from Firebase:", error);
     });
 
+    const unsubscribeProductSpecs = onSnapshot(collection(db, 'productSpecs'), (snapshot) => {
+      if (!snapshot.empty) {
+        const specsData: any[] = [];
+        snapshot.forEach((doc) => {
+          specsData.push(doc.data());
+        });
+        setProductSpecs(specsData as any);
+      }
+    }, (error) => {
+      console.error("Error fetching product specs from Firebase:", error);
+    });
+
+    const unsubscribeMachineCapabilities = onSnapshot(collection(db, 'machineCapabilities'), (snapshot) => {
+      if (!snapshot.empty) {
+        const capabilitiesData: any[] = [];
+        snapshot.forEach((doc) => {
+          capabilitiesData.push(doc.data());
+        });
+        setMachineCapabilities(capabilitiesData as any);
+      }
+    }, (error) => {
+      console.error("Error fetching machine capabilities from Firebase:", error);
+    });
+
     return () => {
       unsubscribeJobs();
       unsubscribeLogs();
@@ -142,6 +168,8 @@ const App: React.FC = () => {
       unsubscribeCustomKnowledge();
       unsubscribeInventory();
       unsubscribeBoms();
+      unsubscribeProductSpecs();
+      unsubscribeMachineCapabilities();
     };
   }, []);
   
@@ -450,12 +478,20 @@ const App: React.FC = () => {
     try {
       let newJobs = [...jobs];
       for (const job of batchJobs) {
-        await setDoc(doc(db, 'jobs', job.id), job);
-        const existingIndex = newJobs.findIndex(j => j.id === job.id);
+        // Deeply sanitize job object to remove undefined values before saving to Firebase
+        const sanitizedJob = JSON.parse(JSON.stringify(job));
+        
+        // Ensure ID is valid
+        if (!sanitizedJob.id) {
+          sanitizedJob.id = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        await setDoc(doc(db, 'jobs', sanitizedJob.id), sanitizedJob);
+        const existingIndex = newJobs.findIndex(j => j.id === sanitizedJob.id);
         if (existingIndex !== -1) {
-          newJobs[existingIndex] = job;
+          newJobs[existingIndex] = sanitizedJob;
         } else {
-          newJobs.push(job);
+          newJobs.push(sanitizedJob);
         }
       }
       addLog('CREATE', `นำเข้าข้อมูล/อัปเดตงานผลิตจำนวน ${batchJobs.length} รายการ`, undefined, newJobs);
@@ -945,7 +981,7 @@ const App: React.FC = () => {
           <Route path="/plan" element={<ProductionPlan jobs={jobs} inventory={inventory} boms={boms} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} />} />
           <Route path="/plan-vs-actual" element={<PlanVsActualDashboard jobs={jobs} onUpdateActuals={handleUpdateActuals} />} />
           <Route path="/analysis" element={<ProductionAnalysis jobs={jobs} />} />
-          <Route path="/oee" element={<OEEDashboard jobs={jobs} downtimeLogs={downtimeLogs} machineCapabilities={MACHINE_MOLD_CAPABILITIES} />} />
+          <Route path="/oee" element={<OEEDashboard jobs={jobs} downtimeLogs={downtimeLogs} machineCapabilities={machineCapabilities} />} />
           <Route path="/schedule" element={<TimelineView jobs={jobs} onUpdateJob={handleSaveJob} />} />
           <Route path="/list" element={<JobTable jobs={jobs} inventory={inventory} boms={boms} onEditJob={handleEditJob} onPrintHandover={handlePrintHandover} onPrintTag={handlePrintTag} onViewOrder={handleViewOrder} />} />
           <Route path="/machines" element={<MachineGrid jobs={jobs} onEditJob={handleEditJob} />} />
@@ -962,7 +998,7 @@ const App: React.FC = () => {
               onDeleteBom={handleDeleteBom}
             />
           } />
-          <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
+          <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} productSpecs={productSpecs} machineCapabilities={machineCapabilities} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
           <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />} />
           <Route path="/downtime-logs" element={<DowntimeLogsView logs={downtimeLogs} />} />
           <Route path="/form-templates" element={
@@ -979,7 +1015,7 @@ const App: React.FC = () => {
           <Route path="/order-detail" element={viewingOrderJob ? <ProductionOrderPrint job={viewingOrderJob} onBack={() => navigate('/plan')} /> : <Navigate to="/plan" />} />
           <Route path="/plan-print" element={<ProductionPlanPrint jobs={jobs} onBack={() => navigate('/plan')} />} />
           <Route path="/handover" element={handoverJobs.length > 0 ? <DocumentHandoverView jobs={handoverJobs} onBack={() => navigate('/list')} /> : <Navigate to="/list" />} />
-          <Route path="/tag-print" element={tagJob ? <ProductTagPrint job={tagJob} onBack={() => navigate('/list')} /> : <Navigate to="/list" />} />
+          <Route path="/tag-print" element={tagJob ? <ProductTagView job={tagJob} productSpecs={productSpecs} onBack={() => navigate('/list')} /> : <Navigate to="/list" />} />
           <Route path="/custom-form" element={customForm ? <CustomFormView 
               html={customForm.html} 
               title={customForm.title} 
@@ -1005,8 +1041,8 @@ const App: React.FC = () => {
         jobs={jobs}
         inventory={inventory}
         boms={boms}
-        specs={PRODUCT_SPECS}
-        machineCapabilities={MACHINE_MOLD_CAPABILITIES}
+        specs={productSpecs}
+        machineCapabilities={machineCapabilities}
         formTemplates={formTemplates}
         customKnowledge={customKnowledge}
         downtimeLogs={downtimeLogs}
@@ -1038,6 +1074,7 @@ const App: React.FC = () => {
         job={editingJob}
         inventory={inventory}
         boms={boms}
+        productSpecs={productSpecs}
         onSave={handleSaveJob} 
       />
 
