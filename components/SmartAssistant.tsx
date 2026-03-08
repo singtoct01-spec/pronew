@@ -24,7 +24,7 @@ interface SmartAssistantProps {
   onCreateJob: (job: ProductionJob) => void;
   onDeleteJob?: (jobId: string) => void;
   onUpdateActuals?: (jobId: string, actuals: number, reason?: string) => void;
-  onBatchUpsert?: (jobs: ProductionJob[]) => void;
+  onBatchUpsert?: (jobs: ProductionJob[]) => Promise<boolean> | void;
   onGenerateForm?: (html: string, title: string) => void;
   onLogDowntime?: (data: any) => void;
   onAddKnowledge?: (topic: string, content: string) => void;
@@ -87,19 +87,30 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   
   const [apiKeyInput, setApiKeyInput] = useState('');
-  const [savedApiKey, setSavedApiKey] = useState(() => localStorage.getItem('proplanner_gemini_api_key') || process.env.GEMINI_API_KEY || '');
-  const [showKeySetup, setShowKeySetup] = useState(() => !localStorage.getItem('proplanner_gemini_api_key') && !process.env.GEMINI_API_KEY);
+  const [savedApiKey, setSavedApiKey] = useState(() => localStorage.getItem('proplanner_gemini_api_key') || '');
+  const [showKeySetup, setShowKeySetup] = useState(() => !localStorage.getItem('proplanner_gemini_api_key'));
   const [setupError, setSetupError] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSaveApiKey = () => {
-    if (apiKeyInput.trim()) {
-      localStorage.setItem('proplanner_gemini_api_key', apiKeyInput.trim());
-      setSavedApiKey(apiKeyInput.trim());
+    const key = apiKeyInput.trim();
+    if (key) {
+      if (!key.startsWith('AIzaSy')) {
+        setSetupError('API Key ต้องขึ้นต้นด้วย AIzaSy...');
+        return;
+      }
+      localStorage.setItem('proplanner_gemini_api_key', key);
+      setSavedApiKey(key);
       setSetupError('');
       setShowKeySetup(false);
+      
+      setMessages(prev => [...prev, {
+        role: 'model',
+        text: '✅ บันทึก API Key ใหม่เรียบร้อยแล้วครับ ระบบจะใช้ Key ใหม่ในการประมวลผลคำสั่งถัดไป',
+        timestamp: new Date().toISOString()
+      }]);
     }
   };
 
@@ -245,6 +256,12 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       };
 
       // 2. Initialize Gemini
+      if (!savedApiKey) {
+        setSetupError('กรุณาใส่ API Key ก่อนใช้งาน');
+        setShowKeySetup(true);
+        setIsLoading(false);
+        return;
+      }
       const ai = new GoogleGenAI({ apiKey: savedApiKey });
       
       // 3. Construct System Prompt (UPGRADED)
@@ -649,7 +666,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                 endDate: new Date(new Date(job.endDate).getTime() + startDiff).toISOString(),
               }));
               if (onBatchUpsert) {
-                onBatchUpsert(updatedJobs);
+                const success = await onBatchUpsert(updatedJobs);
+                if (success === false) {
+                  displayText += `\n\n❌ **ดำเนินการอัตโนมัติล้มเหลว:** เกิดข้อผิดพลาดในการบันทึกข้อมูลลงฐานข้อมูลครับ`;
+                  continue;
+                }
               } else {
                 updatedJobs.forEach(j => onUpdateJob(j));
               }
@@ -881,7 +902,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     return action.data;
   };
 
-  const executeAction = (proposal: any, msgIndex: number) => {
+  const executeAction = async (proposal: any, msgIndex: number) => {
     const type = proposal.type ? String(proposal.type).toUpperCase() : '';
     let responseText = '';
 
@@ -953,7 +974,23 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       });
       
       if (onBatchUpsert) {
-        onBatchUpsert(batchJobs);
+        const success = await onBatchUpsert(batchJobs);
+        if (success === false) {
+           responseText = `❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลงฐานข้อมูลครับ`;
+           setMessages(prev => {
+             const newMessages = [...prev];
+             if (newMessages[msgIndex]) {
+               newMessages[msgIndex] = { ...newMessages[msgIndex], actionProposal: undefined };
+             }
+             newMessages.push({ 
+               role: 'model', 
+               text: responseText, 
+               timestamp: new Date().toISOString()
+             });
+             return newMessages;
+           });
+           return;
+        }
       } else {
         // Fallback if onBatchUpsert is not provided
         batchJobs.forEach(job => {
@@ -1012,7 +1049,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
               <h2 className="font-bold text-lg">ProPlanner Brain</h2>
               <p className="text-xs text-indigo-200">
                 {savedApiKey && savedApiKey.length > 10 
-                  ? `Key: ...${savedApiKey.slice(-4)} ${savedApiKey === process.env.GEMINI_API_KEY ? '(System)' : '(Custom)'}`
+                  ? `Key: ...${savedApiKey.slice(-4)}`
                   : 'ตั้งค่าการเชื่อมต่อ AI'}
               </p>
             </div>

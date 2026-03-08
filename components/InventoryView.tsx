@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { InventoryItem, ProductBOM } from '../types';
-import { Search, Package, AlertTriangle, Layers, Filter, Upload, FileDown, Plus, Edit2, Trash2, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Search, Package, AlertTriangle, Layers, Filter, Upload, FileDown, Plus, Edit2, Trash2, CheckCircle2, ArrowRight, CheckSquare, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { InventoryItemModal } from './InventoryItemModal';
 import { BomModal } from './BomModal';
@@ -40,6 +40,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
+  // Bulk Edit State
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [bulkEditCategory, setBulkEditCategory] = useState<string>('');
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
   const handleOpenAddItem = () => {
     setEditingItem(null);
     setIsItemModalOpen(true);
@@ -55,6 +61,44 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       onUpdateInventory?.(item as InventoryItem);
     } else {
       onAddInventory?.(item);
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!bulkEditCategory || selectedItems.length === 0) return;
+    
+    setIsBulkUpdating(true);
+    try {
+      for (const id of selectedItems) {
+        const item = inventory.find(i => i.id === id);
+        if (item && onUpdateInventory) {
+          await onUpdateInventory({ ...item, category: bulkEditCategory });
+        }
+      }
+      setSelectedItems([]);
+      setIsBulkEditModalOpen(false);
+      setBulkEditCategory('');
+    } catch (error) {
+      console.error("Error bulk updating:", error);
+      alert("เกิดข้อผิดพลาดในการอัปเดตข้อมูล");
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItems.length === filteredInventory.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredInventory.map(item => item.id));
+    }
+  };
+
+  const toggleSelectItem = (id: string) => {
+    if (selectedItems.includes(id)) {
+      setSelectedItems(selectedItems.filter(itemId => itemId !== id));
+    } else {
+      setSelectedItems([...selectedItems, id]);
     }
   };
 
@@ -305,6 +349,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <Upload size={16} />
                   <span className="hidden sm:inline">นำเข้า Excel</span>
                 </button>
+                {selectedItems.length > 0 && (
+                  <button 
+                    className="flex items-center gap-2 px-3 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm font-medium shadow-sm transition-colors"
+                    onClick={() => setIsBulkEditModalOpen(true)}
+                  >
+                    <CheckSquare size={16} />
+                    <span className="hidden sm:inline">แก้ไขหมวดหมู่ ({selectedItems.length})</span>
+                  </button>
+                )}
                 <button 
                   className="flex items-center gap-2 px-3 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium shadow-sm transition-colors"
                   onClick={handleOpenAddItem}
@@ -319,6 +372,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             <table className="w-full text-sm text-left">
               <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                 <tr>
+                  <th className="px-4 py-4 w-12 text-center">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                      checked={filteredInventory.length > 0 && selectedItems.length === filteredInventory.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                   <th className="px-6 py-4">รหัส / ชื่อสินค้า</th>
                   <th className="px-6 py-4">หมวดหมู่</th>
                   <th className="px-6 py-4">การใช้งาน/กลุ่ม</th>
@@ -334,7 +395,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   const stockPercentage = Math.min(100, Math.max(0, (item.currentStock / (item.maxStock || 1)) * 100));
                   
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={item.id} className={`hover:bg-slate-50 transition-colors ${selectedItems.includes(item.id) ? 'bg-brand-50/50' : ''}`}>
+                      <td className="px-4 py-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                          checked={selectedItems.includes(item.id)}
+                          onChange={() => toggleSelectItem(item.id)}
+                        />
+                      </td>
                       <td className="px-6 py-4">
                         <div className="font-bold text-slate-800">{item.code}</div>
                         <div className="text-xs text-slate-500">{item.name}</div>
@@ -528,7 +597,76 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         onSave={handleSaveBom}
         initialData={editingBom}
         inventory={inventory}
+        boms={boms}
       />
+
+      {/* Bulk Edit Modal */}
+      {isBulkEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <CheckSquare size={20} className="text-brand-600" />
+                แก้ไขหมวดหมู่หลายรายการ
+              </h2>
+              <button 
+                onClick={() => setIsBulkEditModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 text-amber-800 p-3 rounded-lg text-sm border border-amber-200">
+                คุณกำลังแก้ไขหมวดหมู่ของสินค้าจำนวน <strong>{selectedItems.length}</strong> รายการ
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">เลือกหมวดหมู่ใหม่</label>
+                <select 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  value={bulkEditCategory}
+                  onChange={(e) => setBulkEditCategory(e.target.value)}
+                >
+                  <option value="">-- กรุณาเลือกหมวดหมู่ --</option>
+                  <option value="Preform">พรีฟอร์ม (Preform)</option>
+                  <option value="Resin">เม็ดพลาสติก (Resin)</option>
+                  <option value="FG">สินค้าสำเร็จรูป (FG)</option>
+                  <option value="Box">กล่อง (Box)</option>
+                  <option value="Bag">ถุง (Bag)</option>
+                  <option value="Pigment">สี (Pigment)</option>
+                  <option value="Other">อื่นๆ (Other)</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+              <button 
+                onClick={() => setIsBulkEditModalOpen(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
+                disabled={isBulkUpdating}
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={handleBulkUpdate}
+                disabled={!bulkEditCategory || isBulkUpdating}
+                className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 text-sm font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isBulkUpdating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    กำลังบันทึก...
+                  </>
+                ) : (
+                  'บันทึกการเปลี่ยนแปลง'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

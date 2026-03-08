@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProductBOM, InventoryItem } from '../types';
-import { X, Save, Plus, Trash2 } from 'lucide-react';
+import { X, Save, Plus, Trash2, Copy } from 'lucide-react';
 
 interface BomModalProps {
   isOpen: boolean;
@@ -8,11 +8,13 @@ interface BomModalProps {
   onSave: (bom: Omit<ProductBOM, 'id'> | ProductBOM) => void;
   initialData?: ProductBOM | null;
   inventory: InventoryItem[];
+  boms: ProductBOM[];
 }
 
-export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, initialData, inventory }) => {
+export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, initialData, inventory, boms }) => {
   const [productItem, setProductItem] = useState('');
   const [materials, setMaterials] = useState<{ inventoryItemId: string; qtyPerUnit: number; unitType: string }[]>([]);
+  const [selectedBomToCopy, setSelectedBomToCopy] = useState<string>('');
 
   useEffect(() => {
     if (initialData) {
@@ -22,7 +24,20 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
       setProductItem('');
       setMaterials([]);
     }
+    setSelectedBomToCopy('');
   }, [initialData, isOpen]);
+
+  const handleCopyBom = () => {
+    if (!selectedBomToCopy) return;
+    const bomToCopy = boms.find(b => b.id === selectedBomToCopy);
+    if (bomToCopy) {
+      // Copy materials, but keep the productItem empty or keep current if user already typed something
+      setMaterials([...bomToCopy.materials]);
+      if (!productItem) {
+        setProductItem(`${bomToCopy.productItem} (Copy)`);
+      }
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -92,6 +107,33 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
 
         <div className="p-6 overflow-y-auto flex-1">
           <form id="bom-form" onSubmit={handleSubmit} className="space-y-6">
+            {!initialData && boms && boms.length > 0 && (
+              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex flex-col sm:flex-row gap-3 items-end">
+                <div className="flex-1 w-full">
+                  <label className="block text-sm font-medium text-indigo-800 mb-1">คัดลอกสูตรจาก (Copy from existing BOM)</label>
+                  <select
+                    value={selectedBomToCopy}
+                    onChange={(e) => setSelectedBomToCopy(e.target.value)}
+                    className="w-full p-2.5 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  >
+                    <option value="">-- เลือกสูตรที่ต้องการคัดลอก --</option>
+                    {boms.map(bom => (
+                      <option key={bom.id} value={bom.id}>{bom.productItem}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyBom}
+                  disabled={!selectedBomToCopy}
+                  className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-colors w-full sm:w-auto justify-center"
+                >
+                  <Copy size={18} />
+                  คัดลอก
+                </button>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">ชื่อสินค้า (Product Name) *</label>
               <input

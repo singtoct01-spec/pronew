@@ -19,10 +19,13 @@ interface ProductionPlanProps {
   onImportJobs?: (jobs: Partial<ProductionJob>[]) => void;
   onPrintPlan?: () => void;
   onOpenImportModal?: () => void;
+  onUpdateJob?: (job: ProductionJob) => void;
 }
 
-export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory, boms, onEditJob, onViewOrder, onPrintTag, onPrintHandover, onImportJobs, onPrintPlan, onOpenImportModal }) => {
+export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory, boms, onEditJob, onViewOrder, onPrintTag, onPrintHandover, onImportJobs, onPrintPlan, onOpenImportModal, onUpdateJob }) => {
   const [now, setNow] = useState(new Date());
+  const [editingActualJobId, setEditingActualJobId] = useState<string | null>(null);
+  const [tempActualQty, setTempActualQty] = useState<number>(0);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -424,11 +427,59 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                                                 <div className="space-y-2">
                                                     {/* 1. Actual Progress */}
                                                     <div>
-                                                        <div className="flex justify-between text-[10px] mb-0.5">
+                                                        <div className="flex justify-between items-center text-[10px] mb-0.5">
                                                             <span className={`font-bold ${actualTextColor}`}>ผลิตจริง (Actual)</span>
-                                                            <span className={`font-bold font-mono ${actualTextColor}`}>
-                                                                {actualQty.toLocaleString()} <span className="text-slate-400 font-normal">/ {totalQty.toLocaleString()}</span>
-                                                            </span>
+                                                            
+                                                            {editingActualJobId === job.id ? (
+                                                              <div className="flex items-center gap-1">
+                                                                <input 
+                                                                  type="number" 
+                                                                  value={tempActualQty}
+                                                                  onChange={(e) => setTempActualQty(parseInt(e.target.value) || 0)}
+                                                                  className="w-16 px-1 py-0.5 text-xs border border-emerald-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                  autoFocus
+                                                                  onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') {
+                                                                      if (onUpdateJob) {
+                                                                        onUpdateJob({ ...job, actualProduction: tempActualQty });
+                                                                      }
+                                                                      setEditingActualJobId(null);
+                                                                    } else if (e.key === 'Escape') {
+                                                                      setEditingActualJobId(null);
+                                                                    }
+                                                                  }}
+                                                                />
+                                                                <button 
+                                                                  onClick={() => {
+                                                                    if (onUpdateJob) {
+                                                                      onUpdateJob({ ...job, actualProduction: tempActualQty });
+                                                                    }
+                                                                    setEditingActualJobId(null);
+                                                                  }}
+                                                                  className="text-emerald-600 hover:text-emerald-700 bg-emerald-50 rounded p-0.5"
+                                                                >
+                                                                  <CheckCircle2 size={12} />
+                                                                </button>
+                                                                <button 
+                                                                  onClick={() => setEditingActualJobId(null)}
+                                                                  className="text-slate-400 hover:text-slate-600 bg-slate-50 rounded p-0.5"
+                                                                >
+                                                                  <X size={12} />
+                                                                </button>
+                                                              </div>
+                                                            ) : (
+                                                              <span 
+                                                                className={`font-bold font-mono ${actualTextColor} cursor-pointer hover:underline flex items-center gap-1`}
+                                                                onClick={() => {
+                                                                  setEditingActualJobId(job.id);
+                                                                  setTempActualQty(actualQty);
+                                                                }}
+                                                                title="คลิกเพื่ออัปเดตยอดผลิต"
+                                                              >
+                                                                  {actualQty.toLocaleString()} <span className="text-slate-400 font-normal">/ {totalQty.toLocaleString()}</span>
+                                                                  <Edit2 size={10} className="text-slate-300" />
+                                                              </span>
+                                                            )}
                                                         </div>
                                                         <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden border border-slate-300 relative">
                                                             <div className={`h-full rounded-full transition-all duration-500 ${actualBarColor}`} style={{ width: `${actualPercent}%` }}></div>

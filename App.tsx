@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, orderBy, getDocs, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, orderBy, getDocs, addDoc, Timestamp, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import { Sidebar } from './components/Sidebar';
 import { DashboardStats } from './components/DashboardStats';
@@ -478,7 +478,12 @@ const App: React.FC = () => {
   const handleBatchUpsert = async (batchJobs: ProductionJob[]) => {
     try {
       let newJobs = [...jobs];
-      const promises = batchJobs.map(async (job) => {
+      
+      // Use Firestore batch to handle multiple operations efficiently and reliably
+      const batch = writeBatch(db);
+      let successCount = 0;
+
+      batchJobs.forEach((job) => {
         // Deeply sanitize job object to remove undefined values before saving to Firebase
         const sanitizedJob = JSON.parse(JSON.stringify(job));
         
@@ -489,33 +494,28 @@ const App: React.FC = () => {
           sanitizedJob.id = String(sanitizedJob.id).replace(/\//g, '-');
         }
 
-        await setDoc(doc(db, 'jobs', sanitizedJob.id), sanitizedJob);
-        return sanitizedJob;
-      });
-
-      const results = await Promise.allSettled(promises);
-      
-      let successCount = 0;
-      results.forEach(result => {
-        if (result.status === 'fulfilled') {
-          successCount++;
-          const sanitizedJob = result.value;
-          const existingIndex = newJobs.findIndex(j => j.id === sanitizedJob.id);
-          if (existingIndex !== -1) {
-            newJobs[existingIndex] = sanitizedJob;
-          } else {
-            newJobs.push(sanitizedJob);
-          }
+        const jobRef = doc(db, 'jobs', sanitizedJob.id);
+        batch.set(jobRef, sanitizedJob);
+        successCount++;
+        
+        const existingIndex = newJobs.findIndex(j => j.id === sanitizedJob.id);
+        if (existingIndex !== -1) {
+          newJobs[existingIndex] = sanitizedJob;
         } else {
-          console.error("Failed to upsert a job:", result.reason);
+          newJobs.push(sanitizedJob);
         }
       });
+
+      await batch.commit();
 
       if (successCount > 0) {
         addLog('CREATE', `นำเข้าข้อมูล/อัปเดตงานผลิตจำนวน ${successCount} รายการ`, undefined, newJobs);
       }
+      return true;
     } catch (error) {
       console.error("Error batch upserting jobs in Firebase:", error);
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูลแบบ Batch: " + (error as Error).message);
+      return false;
     }
   };
 
@@ -636,10 +636,12 @@ const App: React.FC = () => {
   const handleImportInventory = async (importedItems: any[]) => {
     try {
       // Create a batch to write all imported items to Firebase
+      const batch = writeBatch(db);
       for (const item of importedItems) {
         const itemRef = doc(db, 'inventory', item.id);
-        await setDoc(itemRef, item);
+        batch.set(itemRef, item);
       }
+      await batch.commit();
       
       // Also log the action
       const logRef = collection(db, 'logs');
@@ -654,7 +656,7 @@ const App: React.FC = () => {
       alert(`นำเข้าข้อมูลสำเร็จ ${importedItems.length} รายการ`);
     } catch (error) {
       console.error("Error importing inventory:", error);
-      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล");
+      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + (error as Error).message);
     }
   };
 
@@ -997,7 +999,7 @@ const App: React.FC = () => {
               </div>
             </div>
           } />
-          <Route path="/plan" element={<ProductionPlan jobs={jobs} inventory={inventory} boms={boms} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} />} />
+          <Route path="/plan" element={<ProductionPlan jobs={jobs} inventory={inventory} boms={boms} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} onUpdateJob={handleSaveJob} />} />
           <Route path="/plan-vs-actual" element={<PlanVsActualDashboard jobs={jobs} onUpdateActuals={handleUpdateActuals} />} />
           <Route path="/analysis" element={<ProductionAnalysis jobs={jobs} />} />
           <Route path="/oee" element={<OEEDashboard jobs={jobs} downtimeLogs={downtimeLogs} machineCapabilities={machineCapabilities} />} />
@@ -1091,10 +1093,12 @@ const App: React.FC = () => {
         isOpen={isModalOpen} 
         onClose={() => { setIsModalOpen(false); setEditingJob(null); }} 
         job={editingJob}
+        jobs={jobs}
         inventory={inventory}
         boms={boms}
         productSpecs={productSpecs}
         onSave={handleSaveJob} 
+        onOpenImportModal={() => setIsImportPlanModalOpen(true)}
       />
 
       <GoogleSheetsImportModal 

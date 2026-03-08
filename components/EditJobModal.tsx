@@ -1,28 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { ProductionJob, Status, RawMaterial, ProductBOM, InventoryItem, ProductSpec } from '../types';
-import { X, Save, AlertCircle, Calendar, Plus, Trash2, Wand2, Ruler, Flame, GitCommit, PauseCircle, CheckCircle2 } from 'lucide-react';
+import { X, Save, AlertCircle, Calendar, Plus, Trash2, Wand2, Ruler, Flame, GitCommit, PauseCircle, CheckCircle2, Upload } from 'lucide-react';
 
 interface EditJobModalProps {
   isOpen: boolean;
   onClose: () => void;
   job: ProductionJob | null;
+  jobs?: ProductionJob[];
   inventory: InventoryItem[];
   boms: ProductBOM[];
   productSpecs: ProductSpec[];
   onSave: (updatedJob: ProductionJob) => void;
+  onOpenImportModal?: () => void;
 }
 
-export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job, inventory, boms, productSpecs, onSave }) => {
+export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job, jobs = [], inventory, boms, productSpecs, onSave, onOpenImportModal }) => {
   const [formData, setFormData] = useState<Partial<ProductionJob>>({
     status: 'Running',
     productItem: '',
     productType: 'แก้วน้ำพลาสติก',
     color: '-',
     totalProduction: 0,
+    capacityPerShift: 0,
+    actualProduction: 0,
     priority: 'Normal',
     jobType: 'Planned',
     materials: []
   });
+
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
 
   const toInputString = (isoString?: string) => {
     if (!isoString) return '';
@@ -79,9 +86,10 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
     }));
   };
 
-  const autoFillMaterialsFromBOM = () => {
-    const product = formData.productItem || '';
-    const color = formData.color && formData.color !== '-' ? formData.color : '';
+  const autoFillMaterialsFromBOM = (productOverride?: string, colorOverride?: string, targetOverride?: number) => {
+    const product = productOverride !== undefined ? productOverride : (formData.productItem || '');
+    const color = colorOverride !== undefined ? colorOverride : (formData.color && formData.color !== '-' ? formData.color : '');
+    const target = targetOverride !== undefined ? targetOverride : (formData.totalProduction || 0);
     
     const searchTerms = [
         `${product} (${color})`.trim().toLowerCase(),
@@ -100,18 +108,13 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
     }
 
     if (!bom) {
-      alert(`ไม่พบสูตรการผลิต (BOM) สำหรับสินค้า "${product}" ${color ? `สี ${color}` : ''}`);
-      return;
-    }
-
-    if (!formData.totalProduction || formData.totalProduction <= 0) {
-      alert('กรุณาระบุยอดผลิต (Target) ก่อนคำนวณวัตถุดิบ');
+      if (!productOverride) alert(`ไม่พบสูตรการผลิต (BOM) สำหรับสินค้า "${product}" ${color ? `สี ${color}` : ''}`);
       return;
     }
 
     const newMaterials: RawMaterial[] = bom.materials.map(mat => {
       const inventoryItem = inventory.find(i => i.id === mat.inventoryItemId);
-      const totalQty = mat.qtyPerUnit * (formData.totalProduction || 0);
+      const totalQty = mat.qtyPerUnit * target;
 
       return {
         id: Math.random().toString(36).substr(2, 9),
@@ -174,13 +177,38 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col font-kanit">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
-          <h3 className="font-bold text-xl text-slate-800">{job ? 'แก้ไขรายการผลิต' : 'เพิ่มรายการผลิตใหม่'}</h3>
+          <div className="flex items-center gap-4">
+            <h3 className="font-bold text-xl text-slate-800">{job ? 'แก้ไขรายการผลิต' : 'เพิ่มรายการผลิตใหม่'}</h3>
+            {!job && onOpenImportModal && (
+              <button 
+                type="button"
+                onClick={() => { onClose(); onOpenImportModal(); }} 
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors"
+              >
+                <Upload size={14} /> นำเข้าจาก Excel
+              </button>
+            )}
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full p-2 transition-colors">
             <X size={20} />
           </button>
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-8">
+          {/* Datalists for Autocomplete */}
+          <datalist id="machine-list">
+            {Array.from(new Set(jobs.map(j => j.machineId).filter(Boolean))).map(m => <option key={m} value={m} />)}
+          </datalist>
+          <datalist id="product-type-list">
+            {Array.from(new Set(jobs.map(j => j.productType).filter(Boolean))).map(pt => <option key={pt} value={pt} />)}
+          </datalist>
+          <datalist id="color-list">
+            {Array.from(new Set(jobs.map(j => j.color).filter(Boolean))).map(c => <option key={c} value={c} />)}
+          </datalist>
+          <datalist id="mold-list">
+            {Array.from(new Set(jobs.map(j => j.moldCode).filter(Boolean))).map(m => <option key={m} value={m} />)}
+          </datalist>
+
           {/* Section 1: Basic Job Info */}
           <div className="space-y-4">
             <h4 className="text-sm font-bold text-brand-600 uppercase tracking-widest border-l-4 border-brand-500 pl-2">ข้อมูลทั่วไป & สถานะงาน</h4>
@@ -191,6 +219,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
                 <input 
                   type="text" value={formData.machineId || ''} 
                   onChange={e => setFormData({ ...formData, machineId: e.target.value })}
+                  list="machine-list"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm" placeholder="เช่น IP1, B3" required 
                 />
               </div>
@@ -264,6 +293,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
             <div className="flex justify-between items-center">
                 <h4 className="text-sm font-bold text-brand-600 uppercase tracking-widest border-l-4 border-brand-500 pl-2">ข้อมูลผลิตภัณฑ์</h4>
                 <button 
+                  id="btn-auto-spec"
                   type="button" 
                   onClick={autoFillSpecsFromMaster}
                   className="text-xs flex items-center gap-1 text-slate-600 hover:text-brand-600 font-bold bg-slate-100 hover:bg-brand-50 px-3 py-1.5 rounded-lg transition-colors border border-slate-200"
@@ -272,22 +302,83 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
                 </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-2">
+              <div className="md:col-span-2 relative">
                 <label className="block text-xs font-bold text-slate-500 mb-1">ชื่อสินค้า (Product Item)</label>
-                <input type="text" value={formData.productItem || ''} onChange={e => setFormData({ ...formData, productItem: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" required placeholder="เช่น QE307-2, B01" />
+                <input 
+                  type="text" 
+                  value={showProductDropdown ? productSearch : (formData.productItem || '')} 
+                  onChange={e => {
+                    setProductSearch(e.target.value);
+                    setFormData({ ...formData, productItem: e.target.value });
+                    setShowProductDropdown(true);
+                  }} 
+                  onFocus={() => {
+                    setProductSearch(formData.productItem || '');
+                    setShowProductDropdown(true);
+                  }}
+                  onBlur={() => setTimeout(() => setShowProductDropdown(false), 200)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" 
+                  required 
+                  placeholder="เช่น QE307-2, B01" 
+                />
+                {showProductDropdown && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {boms.filter(b => b.productItem.toLowerCase().includes(productSearch.toLowerCase())).length > 0 ? (
+                      boms.filter(b => b.productItem.toLowerCase().includes(productSearch.toLowerCase())).map((bom, idx) => (
+                        <div 
+                          key={idx}
+                          className="px-3 py-2 hover:bg-brand-50 cursor-pointer text-sm border-b border-slate-100 last:border-0"
+                          onClick={() => {
+                            // Extract color if present in format "Product (Color)"
+                            let product = bom.productItem;
+                            let color = formData.color || '-';
+                            const colorMatch = product.match(/\(([^)]+)\)$/);
+                            if (colorMatch) {
+                              color = colorMatch[1];
+                              product = product.replace(/\s*\([^)]+\)$/, '');
+                            }
+                            
+                            setFormData(prev => ({ 
+                              ...prev, 
+                              productItem: product,
+                              color: color
+                            }));
+                            setProductSearch(product);
+                            setShowProductDropdown(false);
+                            
+                            // We can't auto-fill BOM materials here because totalProduction might be 0
+                            // But we can try to auto-fill specs
+                            setTimeout(() => {
+                              const btn = document.getElementById('btn-auto-spec');
+                              if (btn) btn.click();
+                              autoFillMaterialsFromBOM(product, color, formData.totalProduction);
+                            }, 100);
+                          }}
+                        >
+                          <div className="font-bold text-slate-800">{bom.productItem}</div>
+                          <div className="text-xs text-slate-500">
+                            วัตถุดิบ: {bom.materials.length} รายการ
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-slate-500 text-center">ไม่พบรายการสินค้าในระบบ BOM</div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">ประเภทสินค้า</label>
-                <input type="text" value={formData.productType || ''} onChange={e => setFormData({ ...formData, productType: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="เช่น แก้วพลาสติก" />
+                <input type="text" value={formData.productType || ''} onChange={e => setFormData({ ...formData, productType: e.target.value })} list="product-type-list" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="เช่น แก้วพลาสติก" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">สี (Color)</label>
-                <input type="text" value={formData.color || ''} onChange={e => setFormData({ ...formData, color: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                <input type="text" value={formData.color || ''} onChange={e => setFormData({ ...formData, color: e.target.value })} list="color-list" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
               </div>
               
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">รหัสแม่พิมพ์ (Mold)</label>
-                <input type="text" value={formData.moldCode || ''} onChange={e => setFormData({ ...formData, moldCode: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                <input type="text" value={formData.moldCode || ''} onChange={e => setFormData({ ...formData, moldCode: e.target.value })} list="mold-list" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">น้ำหนัก (กรัม)</label>
@@ -303,9 +394,27 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
               </div>
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-slate-500 mb-1">ยอดผลิตที่ต้องการ (Target)</label>
-                <input type="number" value={formData.totalProduction || ''} onChange={e => setFormData({ ...formData, totalProduction: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-brand-700" required />
+                <input 
+                  type="number" 
+                  value={formData.totalProduction || ''} 
+                  onChange={e => {
+                    const newTarget = parseInt(e.target.value) || 0;
+                    setFormData(prev => ({ ...prev, totalProduction: newTarget }));
+                    
+                    // Auto recalculate BOM if materials exist and seem to be from BOM
+                    if (formData.materials && formData.materials.length > 0 && formData.materials.some(m => m.remarks === 'Auto-filled from BOM')) {
+                      autoFillMaterialsFromBOM(formData.productItem, formData.color, newTarget);
+                    }
+                  }} 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-brand-700" 
+                  required 
+                />
               </div>
-              <div className="md:col-span-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">ยอดผลิตได้จริง (Actual)</label>
+                <input type="number" value={formData.actualProduction || ''} onChange={e => setFormData({ ...formData, actualProduction: parseInt(e.target.value) })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-emerald-600" />
+              </div>
+              <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">วิธีบรรจุ</label>
                 <input type="text" value={formData.packagingMethod || ''} onChange={e => setFormData({ ...formData, packagingMethod: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
               </div>
