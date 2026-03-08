@@ -633,6 +633,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       
       // 6. Parse Response
       let actionProposal = null;
+      let functionVerifiedAction: any = null;
       let displayText = responseText;
 
       if (response.functionCalls && response.functionCalls.length > 0) {
@@ -652,6 +653,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
               } else {
                 updatedJobs.forEach(j => onUpdateJob(j));
               }
+              functionVerifiedAction = { type: 'BATCH_UPSERT', data: updatedJobs };
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เลื่อนงานของเครื่อง ${machineId} ไปเริ่มวันที่ ${new Date(newStartDate).toLocaleString('th-TH')} เรียบร้อยแล้วครับ`;
             } else {
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงานของเครื่อง ${machineId} ในระบบครับ`;
@@ -661,6 +663,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             const targetJob = jobs.find(j => j.jobOrder === jobOrder);
             if (targetJob) {
               onUpdateJob({ ...targetJob, status: status as any });
+              functionVerifiedAction = { type: 'UPDATE', data: { jobOrder } };
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** อัปเดตสถานะงาน ${jobOrder} เป็น ${status} เรียบร้อยแล้วครับ`;
             } else {
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
@@ -683,6 +686,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             };
             if (onCreateJob) {
               onCreateJob(newJob as any);
+              functionVerifiedAction = { type: 'CREATE', data: newJob };
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** สร้างรายการผลิต ${newJob.jobOrder} สำหรับสินค้า ${newJob.productItem} บนเครื่อง ${newJob.machineId} เรียบร้อยแล้วครับ`;
             } else {
               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถสร้างรายการผลิตได้ (Missing handler)`;
@@ -726,6 +730,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
               const targetJob = jobs.find(j => j.jobOrder === jobOrder);
               if (targetJob) {
                 onUpdateActuals(targetJob.id, actuals, reason);
+                functionVerifiedAction = { type: 'UPDATE', data: { jobOrder } };
                 displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** อัปเดตยอดผลิตงาน ${jobOrder} เพิ่ม ${actuals} ชิ้น เรียบร้อยแล้วครับ`;
               } else {
                 displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
@@ -737,6 +742,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
               const targetJob = jobs.find(j => j.jobOrder === jobOrder);
               if (targetJob) {
                 onDeleteJob(targetJob.id);
+                functionVerifiedAction = { type: 'UPDATE', data: { jobOrder } };
                 displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ลบงาน ${jobOrder} ออกจากระบบเรียบร้อยแล้วครับ`;
               } else {
                 displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
@@ -779,6 +785,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         role: 'model', 
         text: displayText,
         actionProposal,
+        verifiedAction: functionVerifiedAction,
         timestamp: new Date().toISOString()
       }]);
 
@@ -829,6 +836,49 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getLiveStatus = (action: any) => {
+    if (!action || !action.data) return null;
+    
+    // BATCH_UPSERT
+    if (action.type === 'BATCH_UPSERT' && Array.isArray(action.data)) {
+      const jobOrders = action.data.map((j: any) => j.jobOrder).filter(Boolean);
+      const liveJobs = jobs.filter(j => jobOrders.includes(j.jobOrder));
+      return {
+        _status: `พบข้อมูลในระบบ ${liveJobs.length} จาก ${jobOrders.length} รายการ`,
+        liveData: liveJobs.map(j => ({ 
+          jobOrder: j.jobOrder, 
+          status: j.status, 
+          actual: j.actualProduction, 
+          target: j.totalProduction, 
+          machine: j.machineId 
+        }))
+      };
+    }
+    
+    // Single UPDATE or CREATE or updateJobStatus
+    const jobOrder = action.data.jobOrder;
+    if (jobOrder) {
+      const liveJob = jobs.find(j => j.jobOrder === jobOrder);
+      if (liveJob) {
+        return {
+          _status: 'พบข้อมูลในระบบ (Found)',
+          liveData: { 
+            jobOrder: liveJob.jobOrder, 
+            status: liveJob.status, 
+            actual: liveJob.actualProduction, 
+            target: liveJob.totalProduction, 
+            machine: liveJob.machineId 
+          }
+        };
+      } else {
+        return { _status: 'ไม่พบข้อมูลในระบบ (Not Found)' };
+      }
+    }
+    
+    // Fallback for other actions
+    return action.data;
   };
 
   const executeAction = (proposal: any, msgIndex: number) => {
@@ -937,7 +987,12 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       if (newMessages[msgIndex]) {
         newMessages[msgIndex] = { ...newMessages[msgIndex], actionProposal: undefined };
       }
-      newMessages.push({ role: 'model', text: responseText, timestamp: new Date().toISOString() });
+      newMessages.push({ 
+        role: 'model', 
+        text: responseText, 
+        timestamp: new Date().toISOString(),
+        verifiedAction: { type, data: proposal.data }
+      });
       return newMessages;
     });
   };
@@ -1053,6 +1108,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                 : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
             }`}>
               
+              {/* Header Info */}
+              <div className={`flex items-center gap-2 mb-2 text-[10px] font-medium ${msg.role === 'user' ? 'text-indigo-200 justify-end' : 'text-slate-500'}`}>
+                {msg.role === 'user' ? 'คุณ' : 'ProPlanner Brain'}
+              </div>
+
               {/* Image Preview in Chat History */}
               {msg.image && (
                 <div className="mb-3 rounded-lg overflow-hidden border border-white/20">
@@ -1082,16 +1142,44 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                   <div className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100 mb-3 font-mono overflow-x-auto max-h-32">
                     {JSON.stringify(msg.actionProposal.data, null, 2)}
                   </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => executeAction(msg.actionProposal, idx)}
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1"
-                    >
-                      <CheckCircle size={14} /> ยืนยัน (Approve)
-                    </button>
-                  </div>
+                  {idx === messages.length - 1 && (
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => executeAction(msg.actionProposal, idx)}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1"
+                      >
+                        <CheckCircle size={14} /> ยืนยัน (Approve)
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* Verified Action Card */}
+              {msg.verifiedAction && (
+                <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="flex items-start gap-2 mb-2">
+                    <CheckCircle className="text-emerald-600 shrink-0" size={16} />
+                    <span className="text-xs font-bold text-emerald-700 uppercase tracking-wide">
+                      ดำเนินการแล้ว (Executed)
+                    </span>
+                  </div>
+                  <details className="text-xs text-slate-600 bg-white rounded border border-emerald-100 mb-1 overflow-hidden">
+                    <summary className="p-2 cursor-pointer font-medium hover:bg-slate-50 outline-none flex justify-between items-center">
+                      <span>ตรวจสอบข้อมูลจริงในระบบ (Verify Live Data)</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Live</span>
+                    </summary>
+                    <div className="p-2 border-t border-emerald-100 font-mono overflow-x-auto max-h-48 bg-slate-50">
+                      {JSON.stringify(getLiveStatus(msg.verifiedAction), null, 2)}
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              {/* Timestamp at bottom right */}
+              <div className={`text-[10px] mt-2 text-right ${msg.role === 'user' ? 'text-indigo-200' : 'text-slate-400'}`}>
+                {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}
+              </div>
             </div>
           </div>
         ))}

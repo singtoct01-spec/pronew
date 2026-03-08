@@ -170,9 +170,14 @@ export interface AiMessage {
   image?: string; 
   timestamp: string;
   actionProposal?: {
-    type: 'UPDATE' | 'CREATE';
+    type: 'UPDATE' | 'CREATE' | 'BATCH_UPSERT' | 'GENERATE_FORM' | 'LOG_DOWNTIME';
     data: any;
     reason: string;
+    executedAt?: string;
+  };
+  verifiedAction?: {
+    type: string;
+    data: any;
   };
 }
 

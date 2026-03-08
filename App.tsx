@@ -249,6 +249,7 @@ const App: React.FC = () => {
             const sanitizedMsg = { ...msg };
             if (sanitizedMsg.image === undefined) delete sanitizedMsg.image;
             if (sanitizedMsg.actionProposal === undefined) delete sanitizedMsg.actionProposal;
+            if (sanitizedMsg.verifiedAction === undefined) delete sanitizedMsg.verifiedAction;
             
             await addDoc(collection(db, 'chat_history'), sanitizedMsg);
           } catch (error) {
@@ -477,24 +478,42 @@ const App: React.FC = () => {
   const handleBatchUpsert = async (batchJobs: ProductionJob[]) => {
     try {
       let newJobs = [...jobs];
-      for (const job of batchJobs) {
+      const promises = batchJobs.map(async (job) => {
         // Deeply sanitize job object to remove undefined values before saving to Firebase
         const sanitizedJob = JSON.parse(JSON.stringify(job));
         
-        // Ensure ID is valid
+        // Ensure ID is valid and doesn't contain slashes
         if (!sanitizedJob.id) {
           sanitizedJob.id = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        } else {
+          sanitizedJob.id = String(sanitizedJob.id).replace(/\//g, '-');
         }
 
         await setDoc(doc(db, 'jobs', sanitizedJob.id), sanitizedJob);
-        const existingIndex = newJobs.findIndex(j => j.id === sanitizedJob.id);
-        if (existingIndex !== -1) {
-          newJobs[existingIndex] = sanitizedJob;
+        return sanitizedJob;
+      });
+
+      const results = await Promise.allSettled(promises);
+      
+      let successCount = 0;
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          successCount++;
+          const sanitizedJob = result.value;
+          const existingIndex = newJobs.findIndex(j => j.id === sanitizedJob.id);
+          if (existingIndex !== -1) {
+            newJobs[existingIndex] = sanitizedJob;
+          } else {
+            newJobs.push(sanitizedJob);
+          }
         } else {
-          newJobs.push(sanitizedJob);
+          console.error("Failed to upsert a job:", result.reason);
         }
+      });
+
+      if (successCount > 0) {
+        addLog('CREATE', `นำเข้าข้อมูล/อัปเดตงานผลิตจำนวน ${successCount} รายการ`, undefined, newJobs);
       }
-      addLog('CREATE', `นำเข้าข้อมูล/อัปเดตงานผลิตจำนวน ${batchJobs.length} รายการ`, undefined, newJobs);
     } catch (error) {
       console.error("Error batch upserting jobs in Firebase:", error);
     }
@@ -999,7 +1018,7 @@ const App: React.FC = () => {
             />
           } />
           <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} productSpecs={productSpecs} machineCapabilities={machineCapabilities} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
-          <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} />} />
+          <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} jobs={jobs} />} />
           <Route path="/downtime-logs" element={<DowntimeLogsView logs={downtimeLogs} />} />
           <Route path="/form-templates" element={
             <FormTemplatesView 

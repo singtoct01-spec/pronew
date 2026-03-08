@@ -1,15 +1,16 @@
 
 import React, { useState } from 'react';
-import { AuditLog, AiMessage } from '../types';
-import { History, MessageSquare, Bot, User, Clock, FileText, RotateCcw } from 'lucide-react';
+import { AuditLog, AiMessage, ProductionJob } from '../types';
+import { History, MessageSquare, Bot, User, Clock, FileText, RotateCcw, CheckCircle, ChevronDown, ChevronUp, Database } from 'lucide-react';
 
 interface HistoryLogProps {
   logs: AuditLog[];
   aiMessages: AiMessage[];
   onRevert: (log: AuditLog) => void;
+  jobs: ProductionJob[];
 }
 
-export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onRevert }) => {
+export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onRevert, jobs }) => {
   const [activeTab, setActiveTab] = useState<'system' | 'ai'>('system');
 
   const formatDate = (isoStr: string) => {
@@ -23,6 +24,49 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onReve
     } else if (password !== null) {
       alert("รหัสผ่านไม่ถูกต้อง!");
     }
+  };
+
+  const getLiveStatus = (action: any) => {
+    if (!action || !action.data) return null;
+    
+    // BATCH_UPSERT
+    if (action.type === 'BATCH_UPSERT' && Array.isArray(action.data)) {
+      const jobOrders = action.data.map((j: any) => j.jobOrder).filter(Boolean);
+      const liveJobs = jobs.filter(j => jobOrders.includes(j.jobOrder));
+      return {
+        _status: `พบข้อมูลในระบบ ${liveJobs.length} จาก ${jobOrders.length} รายการ`,
+        liveData: liveJobs.map(j => ({ 
+          jobOrder: j.jobOrder, 
+          status: j.status, 
+          actual: j.actualProduction, 
+          target: j.totalProduction, 
+          machine: j.machineId 
+        }))
+      };
+    }
+    
+    // Single UPDATE or CREATE or updateJobStatus
+    const jobOrder = action.data.jobOrder;
+    if (jobOrder) {
+      const liveJob = jobs.find(j => j.jobOrder === jobOrder);
+      if (liveJob) {
+        return {
+          _status: 'พบข้อมูลในระบบ (Found)',
+          liveData: { 
+            jobOrder: liveJob.jobOrder, 
+            status: liveJob.status, 
+            actual: liveJob.actualProduction, 
+            target: liveJob.totalProduction, 
+            machine: liveJob.machineId 
+          }
+        };
+      } else {
+        return { _status: 'ไม่พบข้อมูลในระบบ (Not Found)' };
+      }
+    }
+    
+    // Fallback for other actions
+    return action.data;
   };
 
   return (
@@ -119,12 +163,12 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onReve
                     
                     <div className={`max-w-[70%] rounded-2xl p-4 shadow-sm ${
                         msg.role === 'user' 
-                            ? 'bg-white text-slate-800 border border-slate-200 rounded-tr-none' 
-                            : 'bg-white text-slate-800 border border-indigo-100 rounded-tl-none'
+                            ? 'bg-indigo-600 text-white rounded-tr-none' 
+                            : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
                     }`}>
                          {/* Header Info */}
-                         <div className="flex items-center gap-2 mb-1 opacity-50 text-[10px]">
-                            {msg.role === 'user' ? 'คุณ' : 'ProPlanner Brain'} • {new Date(msg.timestamp).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
+                         <div className={`flex items-center gap-2 mb-2 text-[10px] font-medium ${msg.role === 'user' ? 'text-indigo-200 justify-end' : 'text-slate-500'}`}>
+                            {msg.role === 'user' ? 'คุณ' : 'ProPlanner Brain'}
                          </div>
 
                          {/* Image */}
@@ -138,12 +182,38 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onReve
                          <div className="whitespace-pre-wrap text-sm">{msg.text}</div>
 
                          {/* Action Log */}
-                         {msg.actionProposal && (
-                             <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-500 flex items-center gap-1">
+                         {msg.actionProposal && !msg.verifiedAction && (
+                             <div className={`mt-2 pt-2 border-t text-xs flex items-center gap-1 ${msg.role === 'user' ? 'border-indigo-500 text-indigo-200' : 'border-slate-100 text-slate-500'}`}>
                                 <FileText size={12} />
                                 <span>Action: {msg.actionProposal.type}</span>
                              </div>
                          )}
+
+                         {/* Verified Action Card */}
+                         {msg.verifiedAction && (
+                           <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 animate-in fade-in zoom-in-95 duration-200 text-slate-800">
+                             <div className="flex items-start gap-2 mb-2">
+                               <CheckCircle className="text-emerald-600 shrink-0" size={16} />
+                               <span className="text-xs font-bold text-emerald-700 uppercase tracking-wide">
+                                 ดำเนินการแล้ว (Executed)
+                               </span>
+                             </div>
+                             <details className="text-xs text-slate-600 bg-white rounded border border-emerald-100 mb-1 overflow-hidden">
+                               <summary className="p-2 cursor-pointer font-medium hover:bg-slate-50 outline-none flex justify-between items-center">
+                                 <span>ตรวจสอบข้อมูลจริงในระบบ (Verify Live Data)</span>
+                                 <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Live</span>
+                               </summary>
+                               <div className="p-2 border-t border-emerald-100 font-mono overflow-x-auto max-h-48 bg-slate-50">
+                                 {JSON.stringify(getLiveStatus(msg.verifiedAction), null, 2)}
+                               </div>
+                             </details>
+                           </div>
+                         )}
+
+                         {/* Timestamp at bottom right */}
+                         <div className={`text-[10px] mt-2 text-right ${msg.role === 'user' ? 'text-indigo-200' : 'text-slate-400'}`}>
+                            {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}
+                         </div>
                     </div>
 
                     {msg.role === 'user' && (
