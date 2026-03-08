@@ -28,6 +28,7 @@ export interface InventoryItem {
   location?: string;
   lastUpdated?: string;
   group?: string;
+  unitPrice?: number;
 }
 
 export interface ProductBOM {
@@ -37,7 +38,13 @@ export interface ProductBOM {
     inventoryItemId: string;
     qtyPerUnit: number; 
     unitType: 'pcs' | 'kg' | string;
+    alternativeItemId?: string;
+    alternativeRatio?: number;
   }[];
+  version?: number;
+  status?: 'Active' | 'Archived';
+  imageUrl?: string;
+  sopUrl?: string;
 }
 
 export interface ProductionJob {

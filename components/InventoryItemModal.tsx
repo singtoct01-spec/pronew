@@ -21,7 +21,8 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, 
     maxStock: 0,
     location: '',
     group: '',
-    remarks: ''
+    remarks: '',
+    unitPrice: 0
   });
 
   useEffect(() => {
@@ -39,7 +40,8 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, 
         maxStock: 0,
         location: '',
         group: '',
-        remarks: ''
+        remarks: '',
+        unitPrice: 0
       });
     }
   }, [initialData, isOpen]);
@@ -50,7 +52,7 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, 
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: ['currentStock', 'minStock', 'maxStock'].includes(name) ? Number(value) : value
+      [name]: ['currentStock', 'minStock', 'maxStock', 'unitPrice'].includes(name) ? Number(value) : value
     }));
   };
 
@@ -150,6 +152,18 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, 
                   onChange={handleChange}
                   className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                   placeholder="เช่น kg, pcs"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">ราคาต่อหน่วย (บาท)</label>
+                <input
+                  type="number"
+                  name="unitPrice"
+                  min="0"
+                  step="0.01"
+                  value={formData.unitPrice || 0}
+                  onChange={handleChange}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                 />
               </div>
               <div>

@@ -13,16 +13,57 @@ interface BomModalProps {
 
 export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, initialData, inventory, boms }) => {
   const [productItem, setProductItem] = useState('');
-  const [materials, setMaterials] = useState<{ inventoryItemId: string; qtyPerUnit: number; unitType: string }[]>([]);
+  const [materials, setMaterials] = useState<{ inventoryItemId: string; qtyPerUnit: number; unitType: string; alternativeItemId?: string; alternativeRatio?: number }[]>([]);
   const [selectedBomToCopy, setSelectedBomToCopy] = useState<string>('');
+  const [version, setVersion] = useState<number>(1);
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [sopUrl, setSopUrl] = useState<string>('');
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [templateWeight, setTemplateWeight] = useState<number | ''>('');
+
+  const BOM_TEMPLATES = [
+    {
+      id: 'pe_cap',
+      name: 'ฝา PE (PE Cap)',
+      description: 'LLDPE 80%, HDPE 20% + Master batch 2%',
+      materials: [
+        { name: 'LLDPE (80%)', ratio: 0.80, unit: 'kg' },
+        { name: 'HDPE (20%)', ratio: 0.20, unit: 'kg' },
+        { name: 'Master Batch (2%)', ratio: 0.02, unit: 'kg' }
+      ]
+    },
+    {
+      id: 'pp_cap',
+      name: 'ฝา PP (PP Cap)',
+      description: 'PP 100% + Master batch 2%',
+      materials: [
+        { name: 'PP (100%)', ratio: 1.00, unit: 'kg' },
+        { name: 'Master Batch (2%)', ratio: 0.02, unit: 'kg' }
+      ]
+    },
+    {
+      id: 'pet_preform',
+      name: 'พรีฟอร์ม (PET Preform)',
+      description: 'PET 100%',
+      materials: [
+        { name: 'PET (100%)', ratio: 1.00, unit: 'kg' }
+      ]
+    }
+  ];
 
   useEffect(() => {
     if (initialData) {
       setProductItem(initialData.productItem);
       setMaterials(initialData.materials || []);
+      setVersion(initialData.version || 1);
+      setImageUrl(initialData.imageUrl || '');
+      setSopUrl(initialData.sopUrl || '');
     } else {
       setProductItem('');
       setMaterials([]);
+      setVersion(1);
+      setImageUrl('');
+      setSopUrl('');
     }
     setSelectedBomToCopy('');
   }, [initialData, isOpen]);
@@ -36,6 +77,41 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
       if (!productItem) {
         setProductItem(`${bomToCopy.productItem} (Copy)`);
       }
+    }
+  };
+
+  const handleApplyTemplate = () => {
+    if (!selectedTemplate || !templateWeight) {
+      alert('กรุณาเลือกโครงสร้างหลักและระบุน้ำหนักรวม (กรัม)');
+      return;
+    }
+    
+    const template = BOM_TEMPLATES.find(t => t.id === selectedTemplate);
+    if (!template) return;
+
+    const weightKg = Number(templateWeight) / 1000; // Convert g to kg
+    
+    const newMaterials = template.materials.map(mat => {
+      // Try to find a matching inventory item by name/category
+      let matchedItem = '';
+      if (mat.name.includes('PP')) {
+        matchedItem = inventory.find(i => i.name.includes('PP') && i.category === 'Resin')?.id || '';
+      } else if (mat.name.includes('PET')) {
+        matchedItem = inventory.find(i => i.name.includes('PET') && i.category === 'Resin')?.id || '';
+      } else if (mat.name.includes('Master Batch')) {
+        matchedItem = inventory.find(i => i.category === 'Pigment')?.id || '';
+      }
+
+      return {
+        inventoryItemId: matchedItem,
+        qtyPerUnit: Number((weightKg * mat.ratio).toFixed(6)),
+        unitType: mat.unit,
+        _templateHint: mat.name // Temporary field for UI hint
+      };
+    });
+
+    if (materials.length === 0 || window.confirm('ต้องการแทนที่ส่วนประกอบเดิมด้วยโครงสร้างหลักนี้หรือไม่?')) {
+      setMaterials(newMaterials as any);
     }
   };
 
@@ -86,7 +162,11 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
     const bomData: Omit<ProductBOM, 'id'> | ProductBOM = {
       ...(initialData?.id ? { id: initialData.id } : {}),
       productItem,
-      materials
+      materials,
+      version,
+      imageUrl,
+      sopUrl,
+      status: 'Active'
     };
 
     onSave(bomData);
@@ -134,16 +214,95 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">ชื่อสินค้า (Product Name) *</label>
-              <input
-                type="text"
-                required
-                value={productItem}
-                onChange={(e) => setProductItem(e.target.value)}
-                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                placeholder="เช่น ขวด PET 500ml ลายริ้ว"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">ชื่อสินค้า (Product Name) *</label>
+                <input
+                  type="text"
+                  required
+                  value={productItem}
+                  onChange={(e) => setProductItem(e.target.value)}
+                  list="existing-products"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder="เช่น ขวด PET 500ml ลายริ้ว"
+                />
+                <datalist id="existing-products">
+                  {Array.from(new Set([
+                    ...boms.map(b => b.productItem),
+                    ...inventory.filter(i => i.category === 'FG').map(i => i.name)
+                  ])).map(name => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">เวอร์ชัน (Version)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={version}
+                  onChange={(e) => setVersion(Number(e.target.value))}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">ลิงก์รูปภาพสินค้า (Image URL)</label>
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">ลิงก์เอกสารมาตรฐาน (SOP URL)</label>
+                <input
+                  type="url"
+                  value={sopUrl}
+                  onChange={(e) => setSopUrl(e.target.value)}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+
+            {/* Base Structure Template Section */}
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col sm:flex-row gap-3 items-end">
+              <div className="flex-1 w-full">
+                <label className="block text-sm font-medium text-emerald-800 mb-1">โครงสร้างหลัก (Base Structure)</label>
+                <select
+                  value={selectedTemplate}
+                  onChange={(e) => setSelectedTemplate(e.target.value)}
+                  className="w-full p-2.5 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                >
+                  <option value="">-- เลือกโครงสร้างหลัก --</option>
+                  {BOM_TEMPLATES.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.description})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-full sm:w-32">
+                <label className="block text-sm font-medium text-emerald-800 mb-1">น้ำหนักรวม (g)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={templateWeight}
+                  onChange={(e) => setTemplateWeight(e.target.value ? Number(e.target.value) : '')}
+                  className="w-full p-2.5 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                  placeholder="เช่น 5"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleApplyTemplate}
+                disabled={!selectedTemplate || !templateWeight}
+                className="px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium transition-colors w-full sm:w-auto justify-center"
+              >
+                <Plus size={18} />
+                นำไปใช้
+              </button>
             </div>
 
             <div>
@@ -164,56 +323,110 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {materials.map((mat, index) => (
-                    <div key={index} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
-                      <div className="flex-1 w-full">
-                        <select
-                          required
-                          value={mat.inventoryItemId}
-                          onChange={(e) => handleMaterialChange(index, 'inventoryItemId', e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white text-sm"
+                  {materials.map((mat, index) => {
+                    const selectedItem = inventory.find(i => i.id === mat.inventoryItemId);
+                    const unitPrice = selectedItem?.unitPrice || 0;
+                    const cost = unitPrice * mat.qtyPerUnit;
+
+                    return (
+                    <div key={index} className="flex flex-col bg-slate-50 p-3 rounded-lg border border-slate-200 gap-3">
+                      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                        <div className="flex-1 w-full">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">
+                            วัตถุดิบหลัก {(mat as any)._templateHint && <span className="text-emerald-600 font-semibold ml-1">คำแนะนำ: เลือก {(mat as any)._templateHint}</span>}
+                          </label>
+                          <select
+                            required
+                            value={mat.inventoryItemId}
+                            onChange={(e) => handleMaterialChange(index, 'inventoryItemId', e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white text-sm"
+                          >
+                            <option value="">-- เลือกวัตถุดิบ --</option>
+                            {inventory.filter(item => item.category !== 'FG').map(item => (
+                              <option key={item.id} value={item.id}>
+                                [{item.code}] {item.name} ({item.currentStock} {item.unit}) {item.unitPrice ? `- ฿${item.unitPrice}/${item.unit}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="w-full sm:w-32">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">ปริมาณ</label>
+                          <input
+                            type="number"
+                            required
+                            min="0"
+                            step="0.0001"
+                            value={mat.qtyPerUnit || ''}
+                            onChange={(e) => handleMaterialChange(index, 'qtyPerUnit', Number(e.target.value))}
+                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+                            placeholder="ปริมาณ"
+                          />
+                        </div>
+                        <div className="w-full sm:w-24">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">หน่วย</label>
+                          <input
+                            type="text"
+                            required
+                            value={mat.unitType}
+                            onChange={(e) => handleMaterialChange(index, 'unitType', e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-slate-100"
+                            placeholder="หน่วย"
+                            readOnly
+                          />
+                        </div>
+                        <div className="w-full sm:w-24">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">ต้นทุน (฿)</label>
+                          <input
+                            type="text"
+                            value={cost > 0 ? cost.toFixed(4) : '-'}
+                            className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-slate-100 text-slate-600"
+                            readOnly
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMaterial(index)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors self-end sm:self-auto mt-5"
+                          title="ลบรายการ"
                         >
-                          <option value="">-- เลือกวัตถุดิบ --</option>
-                          {inventory.map(item => (
-                            <option key={item.id} value={item.id}>
-                              [{item.code}] {item.name} ({item.currentStock} {item.unit})
-                            </option>
-                          ))}
-                        </select>
+                          <Trash2 size={18} />
+                        </button>
                       </div>
-                      <div className="w-full sm:w-32">
-                        <input
-                          type="number"
-                          required
-                          min="0"
-                          step="0.0001"
-                          value={mat.qtyPerUnit || ''}
-                          onChange={(e) => handleMaterialChange(index, 'qtyPerUnit', Number(e.target.value))}
-                          className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
-                          placeholder="ปริมาณ"
-                        />
+                      
+                      {/* Alternative Material Section */}
+                      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center pl-0 sm:pl-4 border-t sm:border-t-0 sm:border-l border-slate-200 pt-3 sm:pt-0">
+                        <div className="flex-1 w-full">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">วัตถุดิบทดแทน (ถ้ามี)</label>
+                          <select
+                            value={mat.alternativeItemId || ''}
+                            onChange={(e) => handleMaterialChange(index, 'alternativeItemId', e.target.value)}
+                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white text-sm"
+                          >
+                            <option value="">-- ไม่มี --</option>
+                            {inventory.filter(i => i.id !== mat.inventoryItemId && i.category !== 'FG').map(item => (
+                              <option key={item.id} value={item.id}>
+                                [{item.code}] {item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="w-full sm:w-32">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">สัดส่วนทดแทน (%)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={mat.alternativeRatio || ''}
+                            onChange={(e) => handleMaterialChange(index, 'alternativeRatio', Number(e.target.value))}
+                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+                            placeholder="เช่น 100"
+                            disabled={!mat.alternativeItemId}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full sm:w-24">
-                        <input
-                          type="text"
-                          required
-                          value={mat.unitType}
-                          onChange={(e) => handleMaterialChange(index, 'unitType', e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-slate-100"
-                          placeholder="หน่วย"
-                          readOnly
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMaterial(index)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors self-end sm:self-auto"
-                        title="ลบรายการ"
-                      >
-                        <Trash2 size={18} />
-                      </button>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
             </div>
