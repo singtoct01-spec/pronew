@@ -306,9 +306,9 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         **RESPONSE FORMAT & ACTIONS:**
         - Talk naturally in Thai.
         - Use emojis 🏭 ⚠️ ✅ appropriately.
-        - **Direct Actions (Function Calling):** If the user asks to "เลื่อนงาน", "อัปเดตสถานะงาน", "บันทึกเครื่องจักรเสีย", "สร้างสูตรการผลิต" (BOM), "เพิ่มสินค้า", "เปิดหน้า...", "อัปเดตยอดผลิต", "ลบงาน", "ปริ้นเอกสาร", "เปิดหน้านำเข้า" or "จำว่า...", you MUST use the provided tools (Function Calling) to execute the action immediately. Do not return a JSON block for these.
+        - **CRITICAL: DIRECT ACTIONS (FUNCTION CALLING):** If the user asks you to perform an action (e.g., "เลื่อนงาน", "อัปเดตสถานะงาน", "บันทึกเครื่องจักรเสีย", "สร้างสูตรการผลิต", "เพิ่มสินค้า", "เปิดหน้า...", "อัปเดตยอดผลิต", "ลบงาน", "ปริ้นเอกสาร", "เปิดหน้านำเข้า", "จำว่า..."), you **MUST** use the provided tools (Function Calling) to execute the action. **DO NOT** just describe what you will do. **ACTUALLY CALL THE FUNCTION.**
         - **Navigation:** If the user asks to open a specific page (e.g., "เปิดหน้าคลังสินค้า", "พาไปดูแผนการผลิต"), use the \`navigateApp\` tool.
-        - **Other Actions (JSON Block):** For actions that don't have a specific tool (like creating a new job, batch importing schedule, or generating a form), append a JSON block for Action Proposal EXACTLY in this format:
+        - **Other Actions (JSON Block):** ONLY for actions that DO NOT have a specific tool (like batch importing schedule or generating a form), append a JSON block for Action Proposal EXACTLY in this format:
         \`\`\`json
         {
           "type": "BATCH_UPSERT",
@@ -382,8 +382,6 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       // 4. Prepare Content Parts
       const contents: any[] = [];
       
-      contents.push({ role: 'user', parts: [{ text: `SYSTEM_INSTRUCTION_AND_CONTEXT: ${systemPrompt}` }] });
-
       // Add conversation history (limit to last 100 messages to utilize Gemini's large context window)
       const historyMessages = messages.slice(-100);
       for (const msg of historyMessages) {
@@ -629,9 +627,10 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
 
       // 5. Call API
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-3-flash-preview',
         contents: sanitizedContents,
         config: {
+          systemInstruction: systemPrompt,
           tools: [{ functionDeclarations: [
             rescheduleMachineJobsFunc, updateJobStatusFunc, createJobFunc, 
             logDowntimeFunc, addKnowledgeFunc, createBOMFunc, navigateAppFunc, 
@@ -652,150 +651,57 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       let actionProposal = null;
       let functionVerifiedAction: any = null;
       let displayText = responseText;
+      let pendingFunctionCalls: any[] = [];
 
       if (response.functionCalls && response.functionCalls.length > 0) {
         for (const call of response.functionCalls) {
-          if (call.name === 'rescheduleMachineJobs') {
-            const { machineId, newStartDate } = call.args as any;
-            const machineJobs = jobs.filter(j => j.machineId === machineId).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-            if (machineJobs.length > 0) {
-              const startDiff = new Date(newStartDate).getTime() - new Date(machineJobs[0].startDate).getTime();
-              const updatedJobs = machineJobs.map(job => ({
-                ...job,
-                startDate: new Date(new Date(job.startDate).getTime() + startDiff).toISOString(),
-                endDate: new Date(new Date(job.endDate).getTime() + startDiff).toISOString(),
-              }));
-              if (onBatchUpsert) {
-                const success = await onBatchUpsert(updatedJobs);
-                if (success === false) {
-                  displayText += `\n\n❌ **ดำเนินการอัตโนมัติล้มเหลว:** เกิดข้อผิดพลาดในการบันทึกข้อมูลลงฐานข้อมูลครับ`;
-                  continue;
-                }
-              } else {
-                updatedJobs.forEach(j => onUpdateJob(j));
+          const readOnlyActions = ['navigateApp', 'printDocument', 'openImportModal'];
+          if (readOnlyActions.includes(call.name)) {
+            // Execute read-only actions immediately
+            if (call.name === 'navigateApp') {
+              if (onChangeView) {
+                const { view } = call.args as any;
+                onChangeView(view);
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้า ${view} ให้เรียบร้อยแล้วครับ`;
               }
-              functionVerifiedAction = { type: 'BATCH_UPSERT', data: updatedJobs };
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เลื่อนงานของเครื่อง ${machineId} ไปเริ่มวันที่ ${new Date(newStartDate).toLocaleString('th-TH')} เรียบร้อยแล้วครับ`;
-            } else {
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงานของเครื่อง ${machineId} ในระบบครับ`;
-            }
-          } else if (call.name === 'updateJobStatus') {
-            const { jobOrder, status } = call.args as any;
-            const targetJob = jobs.find(j => j.jobOrder === jobOrder);
-            if (targetJob) {
-              onUpdateJob({ ...targetJob, status: status as any });
-              functionVerifiedAction = { type: 'UPDATE', data: { jobOrder } };
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** อัปเดตสถานะงาน ${jobOrder} เป็น ${status} เรียบร้อยแล้วครับ`;
-            } else {
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
-            }
-          } else if (call.name === 'createJob') {
-            const args = call.args as any;
-            const newJob = {
-              id: `job-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-              jobOrder: args.jobOrder || `JO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
-              productItem: args.productCode,
-              machineId: args.machineId,
-              targetQuantity: args.targetQuantity,
-              actualProduced: 0,
-              startDate: args.startDate,
-              endDate: args.endDate,
-              status: 'Pending',
-              priority: args.priority || 'Medium',
-              color: 'Clear',
-              mold: 'Standard'
-            };
-            if (onCreateJob) {
-              onCreateJob(newJob as any);
-              functionVerifiedAction = { type: 'CREATE', data: newJob };
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** สร้างรายการผลิต ${newJob.jobOrder} สำหรับสินค้า ${newJob.productItem} บนเครื่อง ${newJob.machineId} เรียบร้อยแล้วครับ`;
-            } else {
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถสร้างรายการผลิตได้ (Missing handler)`;
-            }
-          } else if (call.name === 'logDowntime') {
-             if (onLogDowntime) {
-               onLogDowntime(call.args);
-               displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** บันทึกข้อมูลเครื่องจักรขัดข้อง (${(call.args as any).machineId} - ${(call.args as any).reason}) เรียบร้อยแล้วครับ`;
-             }
-          } else if (call.name === 'addKnowledge') {
-            if (onAddKnowledge) {
-              const { topic, content } = call.args as any;
-              onAddKnowledge(topic, content);
-              displayText += `\n\n🧠 **บันทึกความจำ:** ผมบันทึกข้อมูลเรื่อง "${topic}" ไว้ในหน่วยความจำระยะยาวแล้วครับ (แม้เปลี่ยน API Key ก็ยังจำได้)`;
-            }
-          } else if (call.name === 'createBOM') {
-            if (onAddBom) {
-              const { productItem, materials } = call.args as any;
-              onAddBom({ productItem, materials });
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** สร้างสูตรการผลิต (BOM) สำหรับ "${productItem}" เรียบร้อยแล้วครับ สามารถตรวจสอบได้ที่หน้า 'สูตรการผลิต'`;
-            } else {
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถสร้างสูตรการผลิตได้ (Missing handler)`;
-            }
-          } else if (call.name === 'navigateApp') {
-            if (onChangeView) {
-              const { view } = call.args as any;
-              onChangeView(view);
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้า ${view} ให้เรียบร้อยแล้วครับ`;
-            }
-          } else if (call.name === 'addInventory') {
-            if (onAddInventory) {
-              const { code, name, category, currentStock, minStock, unit, location } = call.args as any;
-              onAddInventory({ code, name, category, currentStock, minStock, unit, location });
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เพิ่มรายการสินค้า/วัตถุดิบ "${name}" (${code}) ลงในคลังเรียบร้อยแล้วครับ`;
-            } else {
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถเพิ่มรายการสินค้าได้ (Missing handler)`;
-            }
-          } else if (call.name === 'updateActualProduction') {
-            if (onUpdateActuals) {
-              const { jobOrder, actuals, reason } = call.args as any;
-              const targetJob = jobs.find(j => j.jobOrder === jobOrder);
-              if (targetJob) {
-                onUpdateActuals(targetJob.id, actuals, reason);
-                functionVerifiedAction = { type: 'UPDATE', data: { jobOrder } };
-                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** อัปเดตยอดผลิตงาน ${jobOrder} เพิ่ม ${actuals} ชิ้น เรียบร้อยแล้วครับ`;
+            } else if (call.name === 'printDocument') {
+              const { documentType, jobOrders } = call.args as any;
+              if (documentType === 'tag' && onPrintTag && jobOrders && jobOrders.length > 0) {
+                onPrintTag(jobOrders[0]);
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์ใบแท็กสำหรับงาน ${jobOrders[0]} แล้วครับ`;
+              } else if (documentType === 'handover' && onPrintHandover && jobOrders && jobOrders.length > 0) {
+                onPrintHandover(jobOrders);
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์ใบส่งมอบงานแล้วครับ`;
+              } else if (documentType === 'plan' && onChangeView) {
+                onChangeView('plan-print');
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์แผนการผลิตแล้วครับ`;
               } else {
-                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถพิมพ์เอกสารได้ (ข้อมูลไม่ครบถ้วน หรือ Missing handler)`;
+              }
+            } else if (call.name === 'openImportModal') {
+              if (onOpenImportModal) {
+                onOpenImportModal();
+                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าต่างนำเข้าแผนการผลิตจาก Excel ให้แล้วครับ`;
               }
             }
-          } else if (call.name === 'deleteJob') {
-            if (onDeleteJob) {
-              const { jobOrder } = call.args as any;
-              const targetJob = jobs.find(j => j.jobOrder === jobOrder);
-              if (targetJob) {
-                onDeleteJob(targetJob.id);
-                functionVerifiedAction = { type: 'UPDATE', data: { jobOrder } };
-                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ลบงาน ${jobOrder} ออกจากระบบเรียบร้อยแล้วครับ`;
-              } else {
-                displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่พบงาน ${jobOrder} ในระบบครับ`;
-              }
-            }
-          } else if (call.name === 'printDocument') {
-            const { documentType, jobOrders } = call.args as any;
-            if (documentType === 'tag' && onPrintTag && jobOrders && jobOrders.length > 0) {
-              onPrintTag(jobOrders[0]);
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์ใบแท็กสำหรับงาน ${jobOrders[0]} แล้วครับ`;
-            } else if (documentType === 'handover' && onPrintHandover && jobOrders && jobOrders.length > 0) {
-              onPrintHandover(jobOrders);
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์ใบส่งมอบงานแล้วครับ`;
-            } else if (documentType === 'plan' && onChangeView) {
-              onChangeView('plan-print');
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าพิมพ์แผนการผลิตแล้วครับ`;
-            } else {
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** ไม่สามารถพิมพ์เอกสารได้ (ข้อมูลไม่ครบถ้วน หรือ Missing handler)`;
-            }
-          } else if (call.name === 'openImportModal') {
-            if (onOpenImportModal) {
-              onOpenImportModal();
-              displayText += `\n\n⚡ **ดำเนินการอัตโนมัติ:** เปิดหน้าต่างนำเข้าแผนการผลิตจาก Excel ให้แล้วครับ`;
-            }
+          } else {
+            // Queue data-modifying actions for confirmation
+            pendingFunctionCalls.push({
+              name: call.name,
+              args: call.args
+            });
           }
         }
+        
+        if (pendingFunctionCalls.length > 0) {
+          displayText += `\n\n⏳ **รอการยืนยัน:** ผมเตรียมคำสั่งปรับปรุงข้อมูลไว้แล้ว กรุณากดยืนยันด้านล่างเพื่อดำเนินการครับ`;
+        }
       } else {
-        const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
         if (jsonMatch) {
           try {
             actionProposal = JSON.parse(jsonMatch[1]);
-            displayText = responseText.replace(/```json\n[\s\S]*?\n```/, '').trim();
+            displayText = responseText.replace(/```json\s*[\s\S]*?\s*```/, '').trim();
           } catch (e) {
             console.error("Failed to parse AI JSON action", e);
           }
@@ -806,6 +712,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         role: 'model', 
         text: displayText,
         actionProposal,
+        pendingFunctionCalls: pendingFunctionCalls.length > 0 ? pendingFunctionCalls : undefined,
         verifiedAction: functionVerifiedAction,
         timestamp: new Date().toISOString()
       }]);
@@ -877,6 +784,29 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         }))
       };
     }
+
+    if (action.type === 'FUNCTION_CALLS_EXECUTED' && Array.isArray(action.data)) {
+      const jobOrders: string[] = [];
+      action.data.forEach((call: any) => {
+        if (call.args && call.args.jobOrder) {
+          jobOrders.push(call.args.jobOrder);
+        }
+      });
+      if (jobOrders.length > 0) {
+        const liveJobs = jobs.filter(j => jobOrders.includes(j.jobOrder));
+        return {
+          _status: `พบข้อมูลในระบบ ${liveJobs.length} จากที่ดำเนินการ ${jobOrders.length} รายการ`,
+          liveData: liveJobs.map(j => ({ 
+            jobOrder: j.jobOrder, 
+            status: j.status, 
+            actual: j.actualProduction, 
+            target: j.totalProduction, 
+            machine: j.machineId 
+          }))
+        };
+      }
+      return { _status: 'ดำเนินการเสร็จสิ้น (ไม่มีข้อมูล Job Order ให้ตรวจสอบ)' };
+    }
     
     // Single UPDATE or CREATE or updateJobStatus
     const jobOrder = action.data.jobOrder;
@@ -900,6 +830,149 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     
     // Fallback for other actions
     return action.data;
+  };
+
+  const executePendingFunctionCalls = async (calls: any[], msgIndex: number) => {
+    let responseText = '';
+    let executedCount = 0;
+    let hasError = false;
+
+    for (const call of calls) {
+      try {
+        if (call.name === 'rescheduleMachineJobs') {
+          const { machineId, newStartDate } = call.args as any;
+          const machineJobs = jobs.filter(j => j.machineId === machineId).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+          if (machineJobs.length > 0) {
+            const startDiff = new Date(newStartDate).getTime() - new Date(machineJobs[0].startDate).getTime();
+            const updatedJobs = machineJobs.map(job => ({
+              ...job,
+              startDate: new Date(new Date(job.startDate).getTime() + startDiff).toISOString(),
+              endDate: new Date(new Date(job.endDate).getTime() + startDiff).toISOString(),
+            }));
+            if (onBatchUpsert) {
+              const success = await onBatchUpsert(updatedJobs);
+              if (success === false) {
+                responseText += `\n❌ เลื่อนงานของเครื่อง ${machineId} ล้มเหลว`;
+                hasError = true;
+                continue;
+              }
+            } else {
+              updatedJobs.forEach(j => onUpdateJob(j));
+            }
+            responseText += `\n✅ เลื่อนงานของเครื่อง ${machineId} ไปเริ่มวันที่ ${new Date(newStartDate).toLocaleString('th-TH')} เรียบร้อยแล้ว`;
+            executedCount++;
+          } else {
+            responseText += `\n⚠️ ไม่พบงานของเครื่อง ${machineId}`;
+          }
+        } else if (call.name === 'updateJobStatus') {
+          const { jobOrder, status } = call.args as any;
+          const targetJob = jobs.find(j => j.jobOrder === jobOrder);
+          if (targetJob) {
+            onUpdateJob({ ...targetJob, status: status as any });
+            responseText += `\n✅ อัปเดตสถานะงาน ${jobOrder} เป็น ${status} เรียบร้อยแล้ว`;
+            executedCount++;
+          } else {
+            responseText += `\n⚠️ ไม่พบงาน ${jobOrder}`;
+          }
+        } else if (call.name === 'createJob') {
+          const args = call.args as any;
+          const newJob = {
+            id: `job-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            jobOrder: args.jobOrder || `JO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+            productItem: args.productCode,
+            machineId: args.machineId,
+            targetQuantity: args.targetQuantity,
+            actualProduced: 0,
+            startDate: args.startDate,
+            endDate: args.endDate,
+            status: 'Pending',
+            priority: args.priority || 'Medium',
+            color: 'Clear',
+            mold: 'Standard'
+          };
+          if (onCreateJob) {
+            onCreateJob(newJob as any);
+            responseText += `\n✅ สร้างรายการผลิต ${newJob.jobOrder} สำหรับสินค้า ${newJob.productItem} บนเครื่อง ${newJob.machineId} เรียบร้อยแล้ว`;
+            executedCount++;
+          } else {
+            responseText += `\n❌ ไม่สามารถสร้างรายการผลิตได้`;
+          }
+        } else if (call.name === 'logDowntime') {
+           if (onLogDowntime) {
+             onLogDowntime(call.args);
+             responseText += `\n✅ บันทึกข้อมูลเครื่องจักรขัดข้อง (${(call.args as any).machineId} - ${(call.args as any).reason}) เรียบร้อยแล้ว`;
+             executedCount++;
+           }
+        } else if (call.name === 'addKnowledge') {
+          if (onAddKnowledge) {
+            const { topic, content } = call.args as any;
+            onAddKnowledge(topic, content);
+            responseText += `\n✅ บันทึกข้อมูลเรื่อง "${topic}" ไว้ในหน่วยความจำระยะยาวแล้ว`;
+            executedCount++;
+          }
+        } else if (call.name === 'createBOM') {
+          if (onAddBom) {
+            const { productItem, materials } = call.args as any;
+            onAddBom({ productItem, materials });
+            responseText += `\n✅ สร้างสูตรการผลิต (BOM) สำหรับ "${productItem}" เรียบร้อยแล้ว`;
+            executedCount++;
+          } else {
+            responseText += `\n❌ ไม่สามารถสร้างสูตรการผลิตได้`;
+          }
+        } else if (call.name === 'addInventory') {
+          if (onAddInventory) {
+            const { code, name, category, currentStock, minStock, unit, location } = call.args as any;
+            onAddInventory({ code, name, category, currentStock, minStock, unit, location });
+            responseText += `\n✅ เพิ่มรายการสินค้า/วัตถุดิบ "${name}" (${code}) ลงในคลังเรียบร้อยแล้ว`;
+            executedCount++;
+          } else {
+            responseText += `\n❌ ไม่สามารถเพิ่มรายการสินค้าได้`;
+          }
+        } else if (call.name === 'updateActualProduction') {
+          if (onUpdateActuals) {
+            const { jobOrder, actuals, reason } = call.args as any;
+            const targetJob = jobs.find(j => j.jobOrder === jobOrder);
+            if (targetJob) {
+              onUpdateActuals(targetJob.id, actuals, reason);
+              responseText += `\n✅ อัปเดตยอดผลิตงาน ${jobOrder} เพิ่ม ${actuals} ชิ้น เรียบร้อยแล้ว`;
+              executedCount++;
+            } else {
+              responseText += `\n⚠️ ไม่พบงาน ${jobOrder}`;
+            }
+          }
+        } else if (call.name === 'deleteJob') {
+          if (onDeleteJob) {
+            const { jobOrder } = call.args as any;
+            const targetJob = jobs.find(j => j.jobOrder === jobOrder);
+            if (targetJob) {
+              onDeleteJob(targetJob.id);
+              responseText += `\n✅ ลบงาน ${jobOrder} ออกจากระบบเรียบร้อยแล้ว`;
+              executedCount++;
+            } else {
+              responseText += `\n⚠️ ไม่พบงาน ${jobOrder}`;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error executing function call:", call.name, error);
+        responseText += `\n❌ เกิดข้อผิดพลาดในการดำเนินการ ${call.name}`;
+        hasError = true;
+      }
+    }
+
+    setMessages(prev => {
+      const newMessages = [...prev];
+      if (newMessages[msgIndex]) {
+        newMessages[msgIndex] = { ...newMessages[msgIndex], pendingFunctionCalls: undefined };
+      }
+      newMessages.push({ 
+        role: 'model', 
+        text: `ดำเนินการเสร็จสิ้น ${executedCount} รายการ:\n${responseText}`, 
+        timestamp: new Date().toISOString(),
+        verifiedAction: { type: 'FUNCTION_CALLS_EXECUTED', data: calls }
+      });
+      return newMessages;
+    });
   };
 
   const executeAction = async (proposal: any, msgIndex: number) => {
@@ -1186,6 +1259,36 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                         className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1"
                       >
                         <CheckCircle size={14} /> ยืนยัน (Approve)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Pending Function Calls Card */}
+              {msg.pendingFunctionCalls && msg.pendingFunctionCalls.length > 0 && (
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="flex items-start gap-2 mb-2">
+                    <AlertTriangle className="text-amber-600 shrink-0" size={16} />
+                    <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">
+                      รอการยืนยันดำเนินการ ({msg.pendingFunctionCalls.length} รายการ)
+                    </span>
+                  </div>
+                  <div className="space-y-2 mb-3">
+                    {msg.pendingFunctionCalls.map((call, callIdx) => (
+                      <div key={callIdx} className="text-xs text-slate-700 bg-white p-2 rounded border border-amber-100 font-mono overflow-x-auto">
+                        <div className="font-bold text-amber-700 mb-1">{call.name}</div>
+                        <div className="text-slate-500 whitespace-pre-wrap">{JSON.stringify(call.args, null, 2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {idx === messages.length - 1 && (
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => executePendingFunctionCalls(msg.pendingFunctionCalls!, idx)}
+                        className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        <CheckCircle size={14} /> ยืนยันดำเนินการทั้งหมด
                       </button>
                     </div>
                   )}

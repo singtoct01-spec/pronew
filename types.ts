@@ -182,6 +182,10 @@ export interface AiMessage {
     reason: string;
     executedAt?: string;
   };
+  pendingFunctionCalls?: {
+    name: string;
+    args: any;
+  }[];
   verifiedAction?: {
     type: string;
     data: any;

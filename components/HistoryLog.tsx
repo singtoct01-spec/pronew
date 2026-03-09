@@ -189,6 +189,14 @@ export const HistoryLog: React.FC<HistoryLogProps> = ({ logs, aiMessages, onReve
                              </div>
                          )}
 
+                         {/* Pending Function Calls Log */}
+                         {msg.pendingFunctionCalls && !msg.verifiedAction && (
+                             <div className={`mt-2 pt-2 border-t text-xs flex items-center gap-1 ${msg.role === 'user' ? 'border-indigo-500 text-indigo-200' : 'border-slate-100 text-slate-500'}`}>
+                                <FileText size={12} />
+                                <span>Pending: {msg.pendingFunctionCalls.length} actions</span>
+                             </div>
+                         )}
+
                          {/* Verified Action Card */}
                          {msg.verifiedAction && (
                            <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 animate-in fade-in zoom-in-95 duration-200 text-slate-800">

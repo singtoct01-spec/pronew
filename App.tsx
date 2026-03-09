@@ -264,6 +264,7 @@ const App: React.FC = () => {
             const sanitizedMsg = { ...msg };
             if (sanitizedMsg.image === undefined) delete sanitizedMsg.image;
             if (sanitizedMsg.actionProposal === undefined) delete sanitizedMsg.actionProposal;
+            if (sanitizedMsg.pendingFunctionCalls === undefined) delete sanitizedMsg.pendingFunctionCalls;
             if (sanitizedMsg.verifiedAction === undefined) delete sanitizedMsg.verifiedAction;
             
             await addDoc(collection(db, 'chat_history'), sanitizedMsg);
