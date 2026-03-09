@@ -535,6 +535,7 @@ export const MOCK_INVENTORY: InventoryItem[] = [
 // Populated BOMs (Recipes) for AI & Master Data Page
 export const MOCK_BOMS: ProductBOM[] = [
   {
+    id: 'bom-1',
     productItem: 'A01 (Clear)',
     materials: [
       { inventoryItemId: 'p2', qtyPerUnit: 1, unitType: 'pcs' }, // P45
@@ -543,6 +544,7 @@ export const MOCK_BOMS: ProductBOM[] = [
     ]
   },
   {
+    id: 'bom-2',
     productItem: 'QE307-2 (Clear)',
     materials: [
       { inventoryItemId: 'p1', qtyPerUnit: 1, unitType: 'pcs' }, // P30-2
@@ -550,6 +552,7 @@ export const MOCK_BOMS: ProductBOM[] = [
     ]
   },
   {
+    id: 'bom-3',
     productItem: 'ฝา 307B (Gold)',
     materials: [
       { inventoryItemId: 'r2', qtyPerUnit: 0.005, unitType: 'kg' }, // PP Resin 5g

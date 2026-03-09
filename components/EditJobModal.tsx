@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProductionJob, Status, RawMaterial, ProductBOM, InventoryItem, ProductSpec } from '../types';
 import { X, Save, AlertCircle, Calendar, Plus, Trash2, Wand2, Ruler, Flame, GitCommit, PauseCircle, CheckCircle2, Upload } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
 
 interface EditJobModalProps {
   isOpen: boolean;
@@ -233,26 +234,26 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">สถานะปัจจุบัน</label>
-                <select 
-                  value={formData.status} 
-                  onChange={e => setFormData({ ...formData, status: e.target.value as Status })}
-                  className={`w-full px-3 py-2 border rounded-lg text-sm font-bold ${
-                    formData.status === 'Running' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
-                    formData.status === 'Delayed' ? 'bg-red-50 text-red-700 border-red-300' :
-                    formData.status === 'Paused' ? 'bg-amber-50 text-amber-700 border-amber-300' :
-                    formData.status === 'Rescheduled' ? 'bg-purple-50 text-purple-700 border-purple-300' :
-                    'bg-slate-50 border-slate-300'
+                <SearchableSelect 
+                  value={formData.status || ''} 
+                  onChange={value => setFormData({ ...formData, status: value as Status })}
+                  options={[
+                    { value: 'Running', label: '🟢 กำลังผลิต (Running)' },
+                    { value: 'Paused', label: '⏸️ หยุดชั่วคราว (Paused)' },
+                    { value: 'Stopped', label: '⛔ หยุด (Stopped)' },
+                    { value: 'Delayed', label: '⚠️ ตกแผน/ล่าช้า (Delayed)' },
+                    { value: 'Rescheduled', label: '📅 เลื่อนแผน (Rescheduled)' },
+                    { value: 'Maintenance', label: '🔧 ซ่อมบำรุง' },
+                    { value: 'Completed', label: '✅ เสร็จสิ้น' },
+                    { value: 'No Plan', label: '⏳ รอดำเนินการ' }
+                  ]}
+                  className={`w-full font-bold ${
+                    formData.status === 'Running' ? 'text-emerald-700' :
+                    formData.status === 'Delayed' ? 'text-red-700' :
+                    formData.status === 'Paused' ? 'text-amber-700' :
+                    formData.status === 'Rescheduled' ? 'text-purple-700' : ''
                   }`}
-                >
-                  <option value="Running">🟢 กำลังผลิต (Running)</option>
-                  <option value="Paused">⏸️ หยุดชั่วคราว (Paused)</option>
-                  <option value="Stopped">⛔ หยุด (Stopped)</option>
-                  <option value="Delayed">⚠️ ตกแผน/ล่าช้า (Delayed)</option>
-                  <option value="Rescheduled">📅 เลื่อนแผน (Rescheduled)</option>
-                  <option value="Maintenance">🔧 ซ่อมบำรุง</option>
-                  <option value="Completed">✅ เสร็จสิ้น</option>
-                  <option value="No Plan">⏳ รอดำเนินการ</option>
-                </select>
+                />
               </div>
             </div>
 
@@ -275,15 +276,16 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
                </div>
                <div className="flex-1">
                   <label className="block text-xs font-bold text-slate-500 mb-1">ประเภทงาน (Job Type)</label>
-                  <select 
-                    value={formData.jobType}
-                    onChange={(e) => setFormData({...formData, jobType: e.target.value as any})}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-md text-sm bg-white"
-                  >
-                    <option value="Planned">ตามแผนปกติ (Planned)</option>
-                    <option value="Inserted">⚡ งานแทรก (Inserted)</option>
-                    <option value="Rework">🛠️ งานแก้ (Rework)</option>
-                  </select>
+                  <SearchableSelect 
+                    value={formData.jobType || ''}
+                    onChange={(value) => setFormData({...formData, jobType: value as any})}
+                    options={[
+                      { value: 'Planned', label: 'ตามแผนปกติ (Planned)' },
+                      { value: 'Inserted', label: '⚡ งานแทรก (Inserted)' },
+                      { value: 'Rework', label: '🛠️ งานแก้ (Rework)' }
+                    ]}
+                    className="w-full"
+                  />
                </div>
             </div>
           </div>

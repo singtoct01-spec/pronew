@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { ProductionJob, Status, InventoryItem, ProductBOM } from '../types';
 import { Search, Filter, AlertTriangle, Pencil, Flame, Zap, PauseCircle, CalendarClock, FileText, CheckSquare, Square, Printer, Tag, AlertOctagon, Edit2 } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
 
 interface JobTableProps {
   jobs: ProductionJob[];
@@ -149,20 +150,21 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, inventory, boms, onEdi
             />
           </div>
           
-          <div className="relative md:w-64">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <select 
-              className="pl-10 pr-8 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none bg-white w-full"
+          <div className="relative md:w-64 z-10">
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 z-10" size={16} />
+            <SearchableSelect 
+              className="pl-8"
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="All">สถานะทั้งหมด</option>
-              <option value="Running">กำลังผลิต (Running)</option>
-              <option value="Paused">หยุดชั่วคราว (Paused)</option>
-              <option value="Delayed">ตกแผน (Delayed)</option>
-              <option value="Stopped">หยุด (Stopped)</option>
-              <option value="Maintenance">ซ่อมบำรุง (Maintenance)</option>
-            </select>
+              onChange={setFilterStatus}
+              options={[
+                { value: 'All', label: 'สถานะทั้งหมด' },
+                { value: 'Running', label: 'กำลังผลิต (Running)' },
+                { value: 'Paused', label: 'หยุดชั่วคราว (Paused)' },
+                { value: 'Delayed', label: 'ตกแผน (Delayed)' },
+                { value: 'Stopped', label: 'หยุด (Stopped)' },
+                { value: 'Maintenance', label: 'ซ่อมบำรุง (Maintenance)' }
+              ]}
+            />
           </div>
         </div>
       </div>

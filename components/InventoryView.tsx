@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { InventoryItem, ProductBOM } from '../types';
-import { Search, Package, AlertTriangle, Layers, Filter, Upload, FileDown, Plus, Edit2, Trash2, CheckCircle2, ArrowRight, CheckSquare, X } from 'lucide-react';
+import { Search, Package, AlertTriangle, Layers, Filter, Upload, FileDown, Plus, Edit2, Trash2, CheckCircle2, ArrowRight, CheckSquare, X, Copy, Printer } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { InventoryItemModal } from './InventoryItemModal';
 import { BomModal } from './BomModal';
@@ -134,6 +134,89 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสูตรการผลิตนี้?')) {
       onDeleteBom?.(id);
     }
+  };
+
+  const handleDuplicateBom = (bom: ProductBOM) => {
+    const duplicatedBom = {
+      ...bom,
+      productItem: `${bom.productItem} (Copy)`,
+      id: undefined, // Remove ID to create a new one
+      version: 1, // Reset version for new copy
+    };
+    setEditingBom(duplicatedBom as any);
+    setIsBomModalOpen(true);
+  };
+
+  const handlePrintBom = (bom: ProductBOM) => {
+    // Basic print functionality - opens a new window with a printable view
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    let materialsHtml = '';
+    let totalCost = 0;
+
+    bom.materials.forEach(mat => {
+      const item = inventory.find(i => i.id === mat.inventoryItemId);
+      const cost = (item?.unitPrice || 0) * mat.qtyPerUnit;
+      totalCost += cost;
+      materialsHtml += `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;">${item?.code || mat.inventoryItemId}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${item?.name || 'Unknown'}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${mat.qtyPerUnit}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${mat.unitType}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${cost.toFixed(2)} ฿</td>
+        </tr>
+      `;
+    });
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>สูตรการผลิต (BOM) - ${bom.productItem}</title>
+          <style>
+            body { font-family: 'Sarabun', sans-serif; padding: 20px; color: #333; }
+            h1 { color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+            .header-info { margin-bottom: 20px; }
+            .header-info p { margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background-color: #f8fafc; padding: 10px; border: 1px solid #ddd; text-align: left; }
+            .total-row { font-weight: bold; background-color: #f1f5f9; }
+          </style>
+        </head>
+        <body>
+          <h1>สูตรการผลิต (Master BOM)</h1>
+          <div class="header-info">
+            <p><strong>รหัส/ชื่อสินค้า:</strong> ${bom.productItem}</p>
+            <p><strong>เวอร์ชัน:</strong> ${bom.version || 1}</p>
+            <p><strong>สถานะ:</strong> ${bom.status === 'Archived' ? 'ยกเลิก (Archived)' : 'ใช้งาน (Active)'}</p>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>รหัสวัตถุดิบ</th>
+                <th>ชื่อวัตถุดิบ</th>
+                <th style="text-align: right;">ปริมาณที่ใช้</th>
+                <th style="text-align: center;">หน่วย</th>
+                <th style="text-align: right;">ต้นทุนโดยประมาณ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${materialsHtml}
+              <tr class="total-row">
+                <td colspan="4" style="padding: 10px; border: 1px solid #ddd; text-align: right;">ต้นทุนวัตถุดิบรวมต่อชิ้น:</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">${totalCost.toFixed(2)} ฿</td>
+              </tr>
+            </tbody>
+          </table>
+          <script>
+            window.onload = () => { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const filteredInventory = inventory.filter(item => {
@@ -516,11 +599,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         <Layers size={24} />
                       </div>
                       <div>
-                        <h3 className="font-bold text-lg text-slate-800">{bom.productItem}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-lg text-slate-800">{bom.productItem}</h3>
+                          {bom.version && <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">v{bom.version}</span>}
+                          {bom.status === 'Archived' && <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">ยกเลิกแล้ว</span>}
+                        </div>
                         <p className="text-sm text-slate-500">สูตรมาตรฐาน (Standard BOM)</p>
                       </div>
                     </div>
                     <div className="flex gap-1">
+                      <button 
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                        onClick={() => handlePrintBom(bom)}
+                        title="พิมพ์สูตร"
+                      >
+                        <Printer size={18} />
+                      </button>
+                      <button 
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                        onClick={() => handleDuplicateBom(bom)}
+                        title="คัดลอกสูตร"
+                      >
+                        <Copy size={18} />
+                      </button>
                       <button 
                         className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
                         onClick={() => handleOpenEditBom(bom)}
@@ -564,6 +665,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           </div>
                         );
                       })}
+                    </div>
+                    
+                    <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
+                      <span className="text-sm font-medium text-slate-500">ต้นทุนวัตถุดิบรวมโดยประมาณ:</span>
+                      <span className="text-lg font-bold text-emerald-600">
+                        ฿{bom.materials.reduce((total, mat) => {
+                          const item = inventory.find(i => i.id === mat.inventoryItemId);
+                          return total + ((item?.unitPrice || 0) * mat.qtyPerUnit);
+                        }, 0).toFixed(4)}
+                      </span>
                     </div>
                   </div>
                   

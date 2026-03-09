@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { CustomKnowledge, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability } from '../types';
-import { Search, Database, Disc, Settings, Weight, Package, Layers, Info, Box, BookOpen, Plus, Trash2 } from 'lucide-react';
+import { Search, Database, Disc, Settings, Weight, Package, Layers, Info, Box, BookOpen, Plus, Trash2, Edit2, Copy, Printer } from 'lucide-react';
+import { BomModal } from './BomModal';
 
 interface KnowledgeBaseProps {
   customKnowledge: CustomKnowledge[];
@@ -11,15 +12,129 @@ interface KnowledgeBaseProps {
   machineCapabilities: MachineMoldCapability[];
   onSaveKnowledge: (knowledge: Omit<CustomKnowledge, 'id' | 'updatedAt'>, id?: string) => void;
   onDeleteKnowledge: (id: string) => void;
+  onAddBom?: (bom: Omit<ProductBOM, 'id'>) => void;
+  onUpdateBom?: (bom: ProductBOM) => void;
+  onDeleteBom?: (id: string) => void;
 }
 
-export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, inventory, boms, productSpecs, machineCapabilities, onSaveKnowledge, onDeleteKnowledge }) => {
+export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, inventory, boms, productSpecs, machineCapabilities, onSaveKnowledge, onDeleteKnowledge, onAddBom, onUpdateBom, onDeleteBom }) => {
   const [activeTab, setActiveTab] = useState<'products' | 'machines' | 'boms' | 'packaging' | 'custom'>('products');
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isAddingKnowledge, setIsAddingKnowledge] = useState(false);
   const [newTopic, setNewTopic] = useState('');
   const [newContent, setNewContent] = useState('');
+
+  // BOM Modal State
+  const [isBomModalOpen, setIsBomModalOpen] = useState(false);
+  const [editingBom, setEditingBom] = useState<ProductBOM | null>(null);
+
+  const handleOpenAddBom = () => {
+    setEditingBom(null);
+    setIsBomModalOpen(true);
+  };
+
+  const handleOpenEditBom = (bom: ProductBOM) => {
+    setEditingBom(bom);
+    setIsBomModalOpen(true);
+  };
+
+  const handleSaveBom = (bom: Omit<ProductBOM, 'id'> | ProductBOM) => {
+    if ('id' in bom && bom.id) {
+      onUpdateBom?.(bom as ProductBOM);
+    } else {
+      onAddBom?.(bom);
+    }
+  };
+
+  const handleDeleteBomClick = (id: string) => {
+    if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสูตรการผลิตนี้?')) {
+      onDeleteBom?.(id);
+    }
+  };
+
+  const handleDuplicateBom = (bom: ProductBOM) => {
+    const duplicatedBom = {
+      ...bom,
+      productItem: `${bom.productItem} (Copy)`,
+      id: undefined, // Remove ID to create a new one
+      version: 1, // Reset version for new copy
+    };
+    setEditingBom(duplicatedBom as any);
+    setIsBomModalOpen(true);
+  };
+
+  const handlePrintBom = (bom: ProductBOM) => {
+    // Basic print functionality - opens a new window with a printable view
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    let materialsHtml = '';
+    let totalCost = 0;
+
+    bom.materials.forEach(mat => {
+      const item = inventory.find(i => i.id === mat.inventoryItemId);
+      const cost = (item?.unitPrice || 0) * mat.qtyPerUnit;
+      totalCost += cost;
+      materialsHtml += `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd;">${item?.code || mat.inventoryItemId}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${item?.name || 'Unknown'}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${mat.qtyPerUnit}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${mat.unitType}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${cost.toFixed(2)} ฿</td>
+        </tr>
+      `;
+    });
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>สูตรการผลิต (BOM) - ${bom.productItem}</title>
+          <style>
+            body { font-family: 'Sarabun', sans-serif; padding: 20px; color: #333; }
+            h1 { color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+            .header-info { margin-bottom: 20px; }
+            .header-info p { margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background-color: #f8fafc; padding: 10px; border: 1px solid #ddd; text-align: left; }
+            .total-row { font-weight: bold; background-color: #f1f5f9; }
+          </style>
+        </head>
+        <body>
+          <h1>สูตรการผลิต (Master BOM)</h1>
+          <div class="header-info">
+            <p><strong>รหัส/ชื่อสินค้า:</strong> ${bom.productItem}</p>
+            <p><strong>เวอร์ชัน:</strong> ${bom.version || 1}</p>
+            <p><strong>สถานะ:</strong> ${bom.status === 'Archived' ? 'ยกเลิก (Archived)' : 'ใช้งาน (Active)'}</p>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>รหัสวัตถุดิบ</th>
+                <th>ชื่อวัตถุดิบ</th>
+                <th style="text-align: right;">ปริมาณที่ใช้</th>
+                <th style="text-align: center;">หน่วย</th>
+                <th style="text-align: right;">ต้นทุนโดยประมาณ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${materialsHtml}
+              <tr class="total-row">
+                <td colspan="4" style="padding: 10px; border: 1px solid #ddd; text-align: right;">ต้นทุนวัตถุดิบรวมต่อชิ้น:</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">${totalCost.toFixed(2)} ฿</td>
+              </tr>
+            </tbody>
+          </table>
+          <script>
+            window.onload = () => { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
 
   const filteredProducts = productSpecs.filter(p => 
     p.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -113,6 +228,15 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
               </h2>
            </div>
            <div className="flex items-center gap-3 w-full md:w-auto">
+              {activeTab === 'boms' && (
+                <button 
+                  onClick={handleOpenAddBom}
+                  className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  <Plus size={16} />
+                  สร้างสูตรการผลิต
+                </button>
+              )}
               {activeTab === 'custom' && (
                 <button 
                   onClick={() => setIsAddingKnowledge(true)}
@@ -243,9 +367,43 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
             <div className="divide-y divide-slate-100">
                {filteredBoms.length > 0 ? filteredBoms.map((bom, idx) => (
                  <div key={idx} className="p-4 hover:bg-slate-50 transition-colors">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Layers size={18} className="text-indigo-500" />
-                        <h3 className="font-bold text-slate-800 text-base">{bom.productItem}</h3>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <Layers size={18} className="text-indigo-500" />
+                            <h3 className="font-bold text-slate-800 text-base">{bom.productItem}</h3>
+                            {bom.version && <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">v{bom.version}</span>}
+                            {bom.status === 'Archived' && <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200">ยกเลิกแล้ว</span>}
+                        </div>
+                        <div className="flex gap-1">
+                          <button 
+                            className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                            onClick={() => handlePrintBom(bom)}
+                            title="พิมพ์สูตร"
+                          >
+                            <Printer size={16} />
+                          </button>
+                          <button 
+                            className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                            onClick={() => handleDuplicateBom(bom)}
+                            title="คัดลอกสูตร"
+                          >
+                            <Copy size={16} />
+                          </button>
+                          <button 
+                            className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+                            onClick={() => handleOpenEditBom(bom)}
+                            title="แก้ไขสูตร"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button 
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            onClick={() => bom.id && handleDeleteBomClick(bom.id)}
+                            title="ลบสูตร"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {bom.materials.map((mat, mIdx) => {
@@ -263,6 +421,16 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
                                 </div>
                             )
                         })}
+                    </div>
+                    
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
+                      <span className="text-sm font-medium text-slate-500">ต้นทุนวัตถุดิบรวมโดยประมาณ:</span>
+                      <span className="text-sm font-bold text-emerald-600">
+                        ฿{bom.materials.reduce((total, mat) => {
+                          const item = inventory.find(i => i.id === mat.inventoryItemId);
+                          return total + ((item?.unitPrice || 0) * mat.qtyPerUnit);
+                        }, 0).toFixed(4)}
+                      </span>
                     </div>
                  </div>
                )) : (
@@ -404,6 +572,15 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
           </div>
         </div>
       )}
+
+      <BomModal 
+        isOpen={isBomModalOpen}
+        onClose={() => setIsBomModalOpen(false)}
+        onSave={handleSaveBom}
+        initialData={editingBom}
+        inventory={inventory}
+        boms={boms}
+      />
     </div>
   );
 };

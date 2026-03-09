@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProductionJob, Status, SIMULATED_NOW, sortMachines, InventoryItem, ProductBOM } from '../types';
-import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download, Upload, Tag, Share } from 'lucide-react';
+import { Edit2, Clock, AlertTriangle, CheckCircle2, PauseCircle, Hammer, Calendar, ArrowRight, Package, Hash, Palette, Layers, AlertCircle, FileDown, Printer, FileText, Flame, Zap, GitCommit, AlertOctagon, TrendingUp, Download, Upload, Tag, Share, X } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';

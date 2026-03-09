@@ -125,10 +125,25 @@ const App: React.FC = () => {
     });
 
     const unsubscribeBoms = onSnapshot(collection(db, 'boms'), (snapshot) => {
-      if (!snapshot.empty) {
+      if (snapshot.empty) {
+        if (!localStorage.getItem('hasSeededBoms')) {
+          // Seed MOCK_BOMS to Firebase only once
+          MOCK_BOMS.forEach(async (bom) => {
+            try {
+              const bomRef = doc(db, 'boms', bom.id || `bom-${Date.now()}`);
+              await setDoc(bomRef, { ...bom, id: bomRef.id });
+            } catch (e) {
+              console.error("Error seeding BOM:", e);
+            }
+          });
+          localStorage.setItem('hasSeededBoms', 'true');
+        } else {
+          setBoms([]);
+        }
+      } else {
         const bomsData: any[] = [];
         snapshot.forEach((doc) => {
-          bomsData.push(doc.data());
+          bomsData.push({ id: doc.id, ...doc.data() });
         });
         setBoms(bomsData as any);
       }
@@ -1019,7 +1034,7 @@ const App: React.FC = () => {
               onDeleteBom={handleDeleteBom}
             />
           } />
-          <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} productSpecs={productSpecs} machineCapabilities={machineCapabilities} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
+          <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} productSpecs={productSpecs} machineCapabilities={machineCapabilities} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} onAddBom={handleAddBom} onUpdateBom={handleUpdateBom} onDeleteBom={handleDeleteBom} />} />
           <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} jobs={jobs} />} />
           <Route path="/downtime-logs" element={<DowntimeLogsView logs={downtimeLogs} />} />
           <Route path="/form-templates" element={

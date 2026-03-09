@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { InventoryItem } from '../types';
 import { X, Save } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
 
 interface InventoryItemModalProps {
   isOpen: boolean;
@@ -103,21 +104,22 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({ isOpen, 
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">หมวดหมู่ *</label>
-                <select
-                  name="category"
+                <SearchableSelect
                   required
+                  allowCustom
                   value={formData.category || 'Other'}
-                  onChange={handleChange}
-                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
-                >
-                  <option value="Resin">เม็ดพลาสติก (Resin)</option>
-                  <option value="Preform">พรีฟอร์ม (Preform)</option>
-                  <option value="Box">กล่อง (Box)</option>
-                  <option value="Bag">ถุง (Bag)</option>
-                  <option value="Pigment">สี (Pigment)</option>
-                  <option value="FG">สินค้าสำเร็จรูป (FG)</option>
-                  <option value="Other">อื่นๆ (Other)</option>
-                </select>
+                  onChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                  options={[
+                    { value: 'Resin', label: 'เม็ดพลาสติก (Resin)' },
+                    { value: 'Preform', label: 'พรีฟอร์ม (Preform)' },
+                    { value: 'Box', label: 'กล่อง (Box)' },
+                    { value: 'Bag', label: 'ถุง (Bag)' },
+                    { value: 'Pigment', label: 'สี (Pigment)' },
+                    { value: 'FG', label: 'สินค้าสำเร็จรูป (FG)' },
+                    { value: 'Other', label: 'อื่นๆ (Other)' }
+                  ]}
+                  className="w-full"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">การใช้งาน/กลุ่ม</label>

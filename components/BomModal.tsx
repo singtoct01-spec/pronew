@@ -18,6 +18,7 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
   const [version, setVersion] = useState<number>(1);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [sopUrl, setSopUrl] = useState<string>('');
+  const [status, setStatus] = useState<'Active' | 'Archived'>('Active');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [templateWeight, setTemplateWeight] = useState<number | ''>('');
 
@@ -58,12 +59,14 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
       setVersion(initialData.version || 1);
       setImageUrl(initialData.imageUrl || '');
       setSopUrl(initialData.sopUrl || '');
+      setStatus(initialData.status || 'Active');
     } else {
       setProductItem('');
       setMaterials([]);
       setVersion(1);
       setImageUrl('');
       setSopUrl('');
+      setStatus('Active');
     }
     setSelectedBomToCopy('');
   }, [initialData, isOpen]);
@@ -166,7 +169,7 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
       version,
       imageUrl,
       sopUrl,
-      status: 'Active'
+      status
     };
 
     onSave(bomData);
@@ -264,6 +267,17 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
                   className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                   placeholder="https://..."
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">สถานะ (Status)</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as 'Active' | 'Archived')}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
+                >
+                  <option value="Active">ใช้งาน (Active)</option>
+                  <option value="Archived">ยกเลิก (Archived)</option>
+                </select>
               </div>
             </div>
 
@@ -427,6 +441,20 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
                     </div>
                   );
                   })}
+                  
+                  {/* Total Cost Calculation */}
+                  <div className="flex justify-end pt-4 mt-4 border-t border-slate-200">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center gap-4">
+                      <div className="text-emerald-800 font-medium">ต้นทุนวัตถุดิบรวมโดยประมาณ:</div>
+                      <div className="text-2xl font-bold text-emerald-600">
+                        ฿{materials.reduce((total, mat) => {
+                          const item = inventory.find(i => i.id === mat.inventoryItemId);
+                          return total + ((item?.unitPrice || 0) * mat.qtyPerUnit);
+                        }, 0).toFixed(4)}
+                      </div>
+                      <div className="text-sm text-emerald-600">/ ชิ้น</div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

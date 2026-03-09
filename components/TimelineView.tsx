@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { ProductionJob } from '../types';
 import { GripVertical, Search, Filter, AlertCircle, CheckCircle2, PlayCircle, Clock, Info } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
 
 interface TimelineViewProps {
   jobs: ProductionJob[];
@@ -333,18 +334,19 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
           </div>
 
           {/* Snap Mode */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto z-20">
             <span className="text-xs text-slate-500">Snap:</span>
-            <select 
-              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            <SearchableSelect 
+              className="w-32"
               value={snapMode}
-              onChange={(e) => setSnapMode(e.target.value as any)}
-            >
-              <option value="free">อิสระ (Free)</option>
-              <option value="hour">รายชั่วโมง (Hour)</option>
-              <option value="half-day">ครึ่งวัน (Half-day)</option>
-              <option value="day">เต็มวัน (Day)</option>
-            </select>
+              onChange={(value) => setSnapMode(value as any)}
+              options={[
+                { value: 'free', label: 'อิสระ (Free)' },
+                { value: 'hour', label: 'รายชั่วโมง (Hour)' },
+                { value: 'half-day', label: 'ครึ่งวัน (Half-day)' },
+                { value: 'day', label: 'เต็มวัน (Day)' }
+              ]}
+            />
           </div>
 
           {/* Search */}
@@ -360,19 +362,20 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
           </div>
 
           {/* Status Filter */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto z-10">
             <Filter size={16} className="text-slate-400" />
-            <select 
-              className="text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+            <SearchableSelect 
+              className="w-40"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="All">ทุกสถานะ</option>
-              <option value="Running">กำลังผลิต (Running)</option>
-              <option value="Delayed">ล่าช้า (Delayed)</option>
-              <option value="Planned">รอผลิต (Planned)</option>
-              <option value="Completed">เสร็จสิ้น (Completed)</option>
-            </select>
+              onChange={setStatusFilter}
+              options={[
+                { value: 'All', label: 'ทุกสถานะ' },
+                { value: 'Running', label: 'กำลังผลิต (Running)' },
+                { value: 'Delayed', label: 'ล่าช้า (Delayed)' },
+                { value: 'Planned', label: 'รอผลิต (Planned)' },
+                { value: 'Completed', label: 'เสร็จสิ้น (Completed)' }
+              ]}
+            />
           </div>
 
           {/* Legend */}

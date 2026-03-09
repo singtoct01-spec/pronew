@@ -3,6 +3,7 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firesto
 import { db } from '../firebase';
 import { AppUser } from '../types';
 import { Plus, Edit, Trash2, Shield, User, Key, CheckCircle, XCircle } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
 
 export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -254,26 +255,28 @@ export const UserManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">สิทธิ์การใช้งาน</label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({...formData, role: e.target.value as 'admin' | 'user'})}
-                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
-                  >
-                    <option value="user">User (ทั่วไป)</option>
-                    <option value="admin">Admin (ผู้ดูแลระบบ)</option>
-                  </select>
+                  <SearchableSelect
+                    value={formData.role || 'user'}
+                    onChange={(value) => setFormData({...formData, role: value as 'admin' | 'user'})}
+                    className="w-full"
+                    options={[
+                      { value: 'user', label: 'User (ทั่วไป)' },
+                      { value: 'admin', label: 'Admin (ผู้ดูแลระบบ)' }
+                    ]}
+                  />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">สถานะ</label>
-                  <select
+                  <SearchableSelect
                     value={formData.isActive ? 'active' : 'inactive'}
-                    onChange={(e) => setFormData({...formData, isActive: e.target.value === 'active'})}
-                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
-                  >
-                    <option value="active">ใช้งานได้</option>
-                    <option value="inactive">ระงับการใช้งาน</option>
-                  </select>
+                    onChange={(value) => setFormData({...formData, isActive: value === 'active'})}
+                    className="w-full"
+                    options={[
+                      { value: 'active', label: 'ใช้งานได้' },
+                      { value: 'inactive', label: 'ระงับการใช้งาน' }
+                    ]}
+                  />
                 </div>
               </div>
 
