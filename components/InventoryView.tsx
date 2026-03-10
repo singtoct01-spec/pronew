@@ -512,8 +512,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       </td>
                       <td className="px-6 py-4 min-w-[150px]">
                         <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-slate-500">Min: {item.minStock.toLocaleString()}</span>
-                          <span className="text-slate-500">Max: {item.maxStock.toLocaleString()}</span>
+                          <span className="text-slate-500">Min: {(item.minStock || 0).toLocaleString()}</span>
+                          <span className="text-slate-500">Max: {(item.maxStock || 0).toLocaleString()}</span>
                         </div>
                         <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                           <div 
@@ -523,7 +523,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         </div>
                       </td>
                       <td className={`px-6 py-4 text-right font-mono font-bold ${isLowStock ? 'text-red-600' : 'text-slate-800'}`}>
-                        {item.currentStock.toLocaleString()} <span className="text-xs font-normal text-slate-500">{item.unit}</span>
+                        {(item.currentStock || 0).toLocaleString()} <span className="text-xs font-normal text-slate-500">{item.unit}</span>
                       </td>
                       <td className="px-6 py-4 text-center">
                         {isLowStock ? (

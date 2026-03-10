@@ -192,7 +192,7 @@ export const ProductionOrderPrint: React.FC<ProductionOrderPrintProps> = ({ job,
                 </div>
                 <div className="flex mt-1">
                   <div className="w-20">จำนวนบรรจุ</div>
-                  <div className="text-blue-600 w-20 text-right mr-2">{bom.injection.qtyPerPack.toLocaleString()}</div>
+                  <div className="text-blue-600 w-20 text-right mr-2">{(bom.injection.qtyPerPack || 0).toLocaleString()}</div>
                   <div className="mr-8">ชิ้น</div>
                   <div className="mr-2">จำนวน</div>
                   <div className="text-right mr-2">{bom.injection.totalPacks}</div>
@@ -234,7 +234,7 @@ export const ProductionOrderPrint: React.FC<ProductionOrderPrintProps> = ({ job,
                 </div>
                 <div className="grid grid-cols-[80px_1fr] mb-1">
                   <div>จำนวนPreform</div>
-                  <div className="text-blue-600">{bom.blow.preformQty.toLocaleString()} ชิ้น</div>
+                  <div className="text-blue-600">{(bom.blow.preformQty || 0).toLocaleString()} ชิ้น</div>
                 </div>
 
                 <div className="grid grid-cols-[80px_1fr] mt-2">
@@ -243,7 +243,7 @@ export const ProductionOrderPrint: React.FC<ProductionOrderPrintProps> = ({ job,
                 </div>
                 <div className="flex mt-1">
                   <div className="w-20">จำนวนบรรจุ</div>
-                  <div className="text-blue-600 w-20 text-right mr-2">{bom.blow.qtyPerPack.toLocaleString()}</div>
+                  <div className="text-blue-600 w-20 text-right mr-2">{(bom.blow.qtyPerPack || 0).toLocaleString()}</div>
                   <div className="mr-8">ใบ</div>
                   <div className="mr-2">จำนวน</div>
                   <div className="text-right mr-2">{bom.blow.totalPacks}</div>

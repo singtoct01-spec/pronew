@@ -86,41 +86,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
   
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [savedApiKey, setSavedApiKey] = useState(() => localStorage.getItem('proplanner_gemini_api_key') || '');
-  const [showKeySetup, setShowKeySetup] = useState(() => !localStorage.getItem('proplanner_gemini_api_key'));
-  const [setupError, setSetupError] = useState('');
-  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleSaveApiKey = () => {
-    const key = apiKeyInput.trim();
-    if (key) {
-      if (!key.startsWith('AIzaSy')) {
-        setSetupError('API Key ต้องขึ้นต้นด้วย AIzaSy...');
-        return;
-      }
-      localStorage.setItem('proplanner_gemini_api_key', key);
-      setSavedApiKey(key);
-      setSetupError('');
-      setShowKeySetup(false);
-      
-      setMessages(prev => [...prev, {
-        role: 'model',
-        text: '✅ บันทึก API Key ใหม่เรียบร้อยแล้วครับ ระบบจะใช้ Key ใหม่ในการประมวลผลคำสั่งถัดไป',
-        timestamp: new Date().toISOString()
-      }]);
-    }
-  };
-
-  const handleRemoveApiKey = () => {
-    localStorage.removeItem('proplanner_gemini_api_key');
-    setSavedApiKey('');
-    setApiKeyInput('');
-    setSetupError('');
-    setShowKeySetup(true);
-  };
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -263,13 +230,13 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
       };
 
       // 2. Initialize Gemini
-      if (!savedApiKey) {
-        setSetupError('กรุณาใส่ API Key ก่อนใช้งาน');
-        setShowKeySetup(true);
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        setMessages(prev => [...prev, { role: 'model', text: 'ไม่พบ API Key ในระบบ กรุณาติดต่อผู้ดูแลระบบ', timestamp: new Date().toISOString() }]);
         setIsLoading(false);
         return;
       }
-      const ai = new GoogleGenAI({ apiKey: savedApiKey });
+      const ai = new GoogleGenAI({ apiKey });
       
       // 3. Construct System Prompt (UPGRADED)
       const systemPrompt = `
@@ -745,18 +712,15 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         }
       }
 
-      const keyHint = savedApiKey && savedApiKey.length > 4 
-        ? `...${savedApiKey.slice(-4)}` 
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+      const keyHint = apiKey && apiKey.length > 4 
+        ? `...${apiKey.slice(-4)}` 
         : '(System Key)';
 
       if (errStr.includes('API key not valid') || errStr.includes('400') || errStr.includes('INVALID_ARGUMENT')) {
-        errorMessage = `API Key (${keyHint}) ไม่ถูกต้อง กรุณาตรวจสอบ Key ในการตั้งค่าครับ`;
-        setSetupError(`API Key (${keyHint}) ไม่ถูกต้อง`);
-        setShowKeySetup(true);
+        errorMessage = `API Key (${keyHint}) ไม่ถูกต้อง กรุณาเปลี่ยน API Key ใหม่`;
       } else if (errStr.includes('quota') || errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED')) {
-        errorMessage = `โควต้าการใช้งาน API เต็ม (Quota Exceeded) สำหรับคีย์ ${keyHint} \n\n⚠️ หมายเหตุ: หากคุณเพิ่งเปลี่ยน Key เป็น Key ฟรีอันใหม่ เป็นไปได้ว่า Key นั้นก็ติดโควต้าเช่นกัน (Google นับโควต้าตามบัญชีผู้ใช้ หรือ IP ในบางกรณี) แนะนำให้ลองใช้ Key จาก Google Cloud Project ที่ผูก Billing แล้ว หรือรอสักครู่ครับ`;
-        setSetupError(`โควต้าเต็ม (Key: ${keyHint}) กรุณาใช้ Key ใหม่`);
-        setShowKeySetup(true);
+        errorMessage = `โควต้าการใช้งาน API เต็ม (Quota Exceeded) สำหรับคีย์ ${keyHint} \n\n⚠️ กรุณากดปุ่ม "เปลี่ยน API Key" ด้านบนเพื่อใช้ Key ของคุณเองครับ`;
       } else if (errStr.includes('network') || errStr.includes('fetch')) {
         errorMessage = 'เกิดปัญหาการเชื่อมต่ออินเทอร์เน็ต (Network Error) กรุณาตรวจสอบสัญญาณเน็ตครับ';
       } else {
@@ -1116,78 +1080,6 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
 
   if (!isOpen) return null;
 
-  if (showKeySetup) {
-    return (
-      <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300 font-kanit">
-        {/* Header */}
-        <div className="p-4 bg-slate-900 text-white flex justify-between items-center shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-              <BrainCircuit size={24} />
-            </div>
-            <div>
-              <h2 className="font-bold text-lg">ProPlanner Brain</h2>
-              <p className="text-xs text-indigo-200">
-                {savedApiKey && savedApiKey.length > 10 
-                  ? `Key: ...${savedApiKey.slice(-4)}`
-                  : 'ตั้งค่าการเชื่อมต่อ AI'}
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
-            <X size={24} />
-          </button>
-        </div>
-
-        {/* Setup Body */}
-        <div className="flex-1 p-6 flex flex-col justify-center items-center bg-slate-50 text-center">
-          <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-inner">
-            <Key size={32} />
-          </div>
-          <h3 className="text-xl font-bold text-slate-800 mb-2">ตั้งค่า Gemini API Key</h3>
-          
-          {setupError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm flex items-center gap-2">
-              <AlertTriangle size={16} />
-              {setupError}
-            </div>
-          )}
-
-          <p className="text-sm text-slate-600 mb-6 max-w-xs leading-relaxed">
-            เพื่อใช้งานผู้ช่วยอัจฉริยะ คุณจำเป็นต้องใส่ API Key ของคุณเอง <br/>
-            <span className="text-xs text-slate-400">(คีย์จะถูกบันทึกไว้ในเบราว์เซอร์ของคุณเท่านั้น ไม่มีการส่งไปเก็บที่เซิร์ฟเวอร์อื่น)</span>
-          </p>
-          
-          <div className="w-full max-w-sm space-y-4">
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder="ใส่ API Key ที่ขึ้นต้นด้วย AIzaSy..."
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
-            />
-            <button
-              onClick={handleSaveApiKey}
-              disabled={!apiKeyInput.trim()}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-medium py-3 rounded-xl transition-colors shadow-md"
-            >
-              บันทึก API Key และเริ่มใช้งาน
-            </button>
-            
-            <a 
-              href="https://aistudio.google.com/app/apikey" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block text-sm text-indigo-600 hover:text-indigo-800 underline mt-4"
-            >
-              รับ Gemini API Key ฟรีที่นี่
-            </a>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200 animate-in slide-in-from-right duration-300 font-kanit">
       {/* Header */}
@@ -1199,15 +1091,24 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           <div>
             <h2 className="font-bold text-lg">ProPlanner Brain</h2>
             <p className="text-xs text-indigo-200">
-               {savedApiKey && savedApiKey.length > 10 
-                  ? `Active Key: ...${savedApiKey.slice(-4)}`
-                  : 'ระบบอัจฉริยะ & ฐานข้อมูล Master'}
+               ระบบอัจฉริยะ & ฐานข้อมูล Master
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={handleRemoveApiKey} className="text-xs text-slate-400 hover:text-white underline" title="เปลี่ยน API Key">
-            เปลี่ยน Key
+          <button 
+            onClick={async () => {
+              const aistudio = (window as any).aistudio;
+              if (aistudio && aistudio.openSelectKey) {
+                await aistudio.openSelectKey();
+              } else {
+                alert('ไม่สามารถเปิดหน้าต่างเปลี่ยน API Key ได้ในสภาพแวดล้อมนี้');
+              }
+            }} 
+            className="text-xs text-slate-400 hover:text-white underline flex items-center gap-1" 
+            title="เปลี่ยน API Key (กรณีโควต้าฟรีหมด)"
+          >
+            <Key size={12} /> เปลี่ยน API Key
           </button>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X size={24} />
