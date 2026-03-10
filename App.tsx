@@ -1026,6 +1026,7 @@ const App: React.FC = () => {
             <InventoryView 
               inventory={inventory} 
               boms={boms}
+              productSpecs={productSpecs}
               onImportInventory={handleImportInventory} 
               onAddInventory={handleAddInventory}
               onUpdateInventory={handleUpdateInventory}

@@ -124,7 +124,14 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
 
   // Auto-scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isOpen) {
+      // Scroll immediately
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+      // And scroll again after a short delay to ensure images/content are rendered
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 300);
+    }
   }, [messages, isOpen]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1318,7 +1325,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
 
               {/* Timestamp at bottom right */}
               <div className={`text-[10px] mt-2 text-right ${msg.role === 'user' ? 'text-indigo-200' : 'text-slate-400'}`}>
-                {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}
+                {msg.timestamp ? new Date(msg.timestamp).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
               </div>
             </div>
           </div>

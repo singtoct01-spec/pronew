@@ -580,6 +580,7 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
         initialData={editingBom}
         inventory={inventory}
         boms={boms}
+        productSpecs={productSpecs}
       />
     </div>
   );

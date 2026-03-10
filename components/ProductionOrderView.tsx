@@ -116,7 +116,7 @@ export const ProductionOrderView: React.FC<ProductionOrderViewProps> = ({ job, b
                     </tr>
                     <tr className="h-[28px]">
                         <td className="border-r border-black pl-2 font-bold">จำนวนสั่งผลิต</td>
-                        <td className="border-r border-black pl-2 text-blue-700 font-bold">{job.totalProduction.toLocaleString()} <span className="text-black font-normal">ชิ้น</span></td>
+                        <td className="border-r border-black pl-2 text-blue-700 font-bold">{(job.totalProduction || 0).toLocaleString()} <span className="text-black font-normal">ชิ้น</span></td>
                         <td className="border-r border-black pl-2 font-bold">เวลาจบผลิต</td>
                         <td className="border-r border-black pl-2 text-blue-700 text-center">{fmtDate(job.endDate)}</td>
                         <td className="border-r border-black pl-2 text-blue-700 text-center" colSpan={3}>{fmtTime(job.endDate)}</td>
@@ -308,7 +308,7 @@ export const ProductionOrderView: React.FC<ProductionOrderViewProps> = ({ job, b
                             </tr>
                             <tr>
                                 <td className="border-r border-black pl-2 h-[28px]">จำนวนPreform</td>
-                                <td className="border-r border-black pl-2 text-blue-700 text-right pr-2 font-bold">{(job.totalProduction * 1.02).toLocaleString()}</td>
+                                <td className="border-r border-black pl-2 text-blue-700 text-right pr-2 font-bold">{((job.totalProduction || 0) * 1.02).toLocaleString()}</td>
                                 <td className="border-r border-black pl-2">ชิ้น</td>
                             </tr>
                             <tr>

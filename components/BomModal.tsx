@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ProductBOM, InventoryItem } from '../types';
+import { ProductBOM, InventoryItem, ProductSpec } from '../types';
 import { X, Save, Plus, Trash2, Copy } from 'lucide-react';
+import { SearchableSelect } from './SearchableSelect';
 
 interface BomModalProps {
   isOpen: boolean;
@@ -9,9 +10,10 @@ interface BomModalProps {
   initialData?: ProductBOM | null;
   inventory: InventoryItem[];
   boms: ProductBOM[];
+  productSpecs?: ProductSpec[];
 }
 
-export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, initialData, inventory, boms }) => {
+export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, initialData, inventory, boms, productSpecs = [] }) => {
   const [productItem, setProductItem] = useState('');
   const [materials, setMaterials] = useState<{ inventoryItemId: string; qtyPerUnit: number; unitType: string; alternativeItemId?: string; alternativeRatio?: number }[]>([]);
   const [selectedBomToCopy, setSelectedBomToCopy] = useState<string>('');
@@ -194,16 +196,13 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
               <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex flex-col sm:flex-row gap-3 items-end">
                 <div className="flex-1 w-full">
                   <label className="block text-sm font-medium text-indigo-800 mb-1">คัดลอกสูตรจาก (Copy from existing BOM)</label>
-                  <select
+                  <SearchableSelect
                     value={selectedBomToCopy}
-                    onChange={(e) => setSelectedBomToCopy(e.target.value)}
-                    className="w-full p-2.5 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                  >
-                    <option value="">-- เลือกสูตรที่ต้องการคัดลอก --</option>
-                    {boms.map(bom => (
-                      <option key={bom.id} value={bom.id}>{bom.productItem}</option>
-                    ))}
-                  </select>
+                    onChange={setSelectedBomToCopy}
+                    options={boms.map(bom => ({ value: bom.id, label: bom.productItem }))}
+                    placeholder="-- เลือกสูตรที่ต้องการคัดลอก --"
+                    className="w-full"
+                  />
                 </div>
                 <button
                   type="button"
@@ -220,23 +219,14 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">ชื่อสินค้า (Product Name) *</label>
-                <input
-                  type="text"
-                  required
+                <SearchableSelect
+                  options={productSpecs.map(s => ({ value: s.code, label: `[${s.code}] ${s.name}` }))}
                   value={productItem}
-                  onChange={(e) => setProductItem(e.target.value)}
-                  list="existing-products"
-                  className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                  placeholder="เช่น ขวด PET 500ml ลายริ้ว"
+                  onChange={setProductItem}
+                  placeholder="เลือกรหัสสินค้าจาก Master Data..."
+                  allowCustom={true}
+                  required={true}
                 />
-                <datalist id="existing-products">
-                  {Array.from(new Set([
-                    ...boms.map(b => b.productItem),
-                    ...inventory.filter(i => i.category === 'FG').map(i => i.name)
-                  ])).map(name => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">เวอร์ชัน (Version)</label>
@@ -285,16 +275,13 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col sm:flex-row gap-3 items-end">
               <div className="flex-1 w-full">
                 <label className="block text-sm font-medium text-emerald-800 mb-1">โครงสร้างหลัก (Base Structure)</label>
-                <select
+                <SearchableSelect
                   value={selectedTemplate}
-                  onChange={(e) => setSelectedTemplate(e.target.value)}
-                  className="w-full p-2.5 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-                >
-                  <option value="">-- เลือกโครงสร้างหลัก --</option>
-                  {BOM_TEMPLATES.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.description})</option>
-                  ))}
-                </select>
+                  onChange={setSelectedTemplate}
+                  options={BOM_TEMPLATES.map(t => ({ value: t.id, label: `${t.name} (${t.description})` }))}
+                  placeholder="-- เลือกโครงสร้างหลัก --"
+                  className="w-full"
+                />
               </div>
               <div className="w-full sm:w-32">
                 <label className="block text-sm font-medium text-emerald-800 mb-1">น้ำหนักรวม (g)</label>
@@ -349,19 +336,17 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
                           <label className="block text-xs font-medium text-slate-500 mb-1">
                             วัตถุดิบหลัก {(mat as any)._templateHint && <span className="text-emerald-600 font-semibold ml-1">คำแนะนำ: เลือก {(mat as any)._templateHint}</span>}
                           </label>
-                          <select
-                            required
+                          <SearchableSelect
+                            required={true}
                             value={mat.inventoryItemId}
-                            onChange={(e) => handleMaterialChange(index, 'inventoryItemId', e.target.value)}
-                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white text-sm"
-                          >
-                            <option value="">-- เลือกวัตถุดิบ --</option>
-                            {inventory.filter(item => item.category !== 'FG').map(item => (
-                              <option key={item.id} value={item.id}>
-                                [{item.code}] {item.name} ({item.currentStock} {item.unit}) {item.unitPrice ? `- ฿${item.unitPrice}/${item.unit}` : ''}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(value) => handleMaterialChange(index, 'inventoryItemId', value)}
+                            options={inventory.filter(item => item.category !== 'FG').map(item => ({
+                              value: item.id,
+                              label: `[${item.code}] ${item.name} (${item.currentStock} ${item.unit}) ${item.unitPrice ? `- ฿${item.unitPrice}/${item.unit}` : ''}`
+                            }))}
+                            placeholder="-- เลือกวัตถุดิบ --"
+                            className="w-full text-sm"
+                          />
                         </div>
                         <div className="w-full sm:w-32">
                           <label className="block text-xs font-medium text-slate-500 mb-1">ปริมาณ</label>
@@ -411,18 +396,16 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
                       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center pl-0 sm:pl-4 border-t sm:border-t-0 sm:border-l border-slate-200 pt-3 sm:pt-0">
                         <div className="flex-1 w-full">
                           <label className="block text-xs font-medium text-slate-500 mb-1">วัตถุดิบทดแทน (ถ้ามี)</label>
-                          <select
+                          <SearchableSelect
                             value={mat.alternativeItemId || ''}
-                            onChange={(e) => handleMaterialChange(index, 'alternativeItemId', e.target.value)}
-                            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white text-sm"
-                          >
-                            <option value="">-- ไม่มี --</option>
-                            {inventory.filter(i => i.id !== mat.inventoryItemId && i.category !== 'FG').map(item => (
-                              <option key={item.id} value={item.id}>
-                                [{item.code}] {item.name}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(value) => handleMaterialChange(index, 'alternativeItemId', value)}
+                            options={inventory.filter(i => i.id !== mat.inventoryItemId && i.category !== 'FG').map(item => ({
+                              value: item.id,
+                              label: `[${item.code}] ${item.name}`
+                            }))}
+                            placeholder="-- ไม่มี --"
+                            className="w-full text-sm"
+                          />
                         </div>
                         <div className="w-full sm:w-32">
                           <label className="block text-xs font-medium text-slate-500 mb-1">สัดส่วนทดแทน (%)</label>

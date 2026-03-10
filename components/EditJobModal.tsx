@@ -471,15 +471,34 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
                 <div key={m.id} className={`grid grid-cols-1 md:grid-cols-12 gap-2 p-2 rounded-lg border ${isShortage ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
                   <div className="md:col-span-1 flex items-center justify-center font-bold text-slate-400">{idx + 1}</div>
                   <div className="md:col-span-3">
-                    <input type="text" placeholder="ชื่อวัตถุดิบ" value={m.name} onChange={e => updateMaterial(m.id, 'name', e.target.value)} className="w-full text-xs p-1.5 border border-slate-300 rounded" />
+                    <SearchableSelect
+                      options={inventory.filter(i => i.category !== 'FG').map(i => ({ value: i.id, label: `[${i.code}] ${i.name}` }))}
+                      value={m.inventoryItemId || ''}
+                      onChange={(value) => {
+                        const item = inventory.find(i => i.id === value);
+                        if (item) {
+                          setFormData(prev => ({
+                            ...prev,
+                            materials: (prev.materials || []).map(mat => mat.id === m.id ? { ...mat, inventoryItemId: item.id, name: item.name, unit: item.unit } : mat)
+                          }));
+                        } else {
+                          setFormData(prev => ({
+                            ...prev,
+                            materials: (prev.materials || []).map(mat => mat.id === m.id ? { ...mat, inventoryItemId: undefined, name: value } : mat)
+                          }));
+                        }
+                      }}
+                      allowCustom={true}
+                      placeholder="ค้นหาวัตถุดิบ..."
+                    />
                     {isShortage && (
                         <div className="text-[10px] text-red-600 font-bold flex items-center gap-1 mt-1">
-                            <AlertCircle size={10} /> ของขาด! มีแค่ {currentStock.toLocaleString()} {m.unit}
+                            <AlertCircle size={10} /> ของขาด! มีแค่ {(currentStock || 0).toLocaleString()} {m.unit}
                         </div>
                     )}
                     {!isShortage && inventoryItem && (
                         <div className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-1">
-                            <CheckCircle2 size={10} /> พร้อมใช้ ({currentStock.toLocaleString()} {m.unit})
+                            <CheckCircle2 size={10} /> พร้อมใช้ ({(currentStock || 0).toLocaleString()} {m.unit})
                         </div>
                     )}
                   </div>

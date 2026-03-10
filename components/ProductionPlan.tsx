@@ -509,7 +509,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                                             <div className="w-full md:w-32 text-right border-l border-slate-200 pl-4 border-dashed md:block hidden">
                                                 <div className="mb-2">
                                                     <p className="text-[10px] text-slate-400 uppercase">เป้าหมาย (Target)</p>
-                                                    <p className="text-lg font-mono font-bold text-slate-800">{job.totalProduction.toLocaleString()}</p>
+                                                    <p className="text-lg font-mono font-bold text-slate-800">{(job.totalProduction || 0).toLocaleString()}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] text-slate-400 uppercase">คงเหลือ (Remaining)</p>

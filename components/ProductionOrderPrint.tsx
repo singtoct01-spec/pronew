@@ -57,7 +57,7 @@ export const ProductionOrderPrint: React.FC<ProductionOrderPrintProps> = ({ job,
               <div className="flex"><span className="w-20">รหัสสินค้า</span> <span className="text-blue-600">{job.productItem}</span></div>
               <div className="flex"><span className="w-20">กำหนดเริ่มผลิต</span> <span className="text-blue-600">{job.startDate ? new Date(job.startDate).toLocaleString('th-TH', { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }) : '-'} น.</span></div>
               
-              <div className="flex"><span className="w-20">จำนวนสั่งผลิต</span> <span className="text-blue-600">{job.totalProduction.toLocaleString()} ชิ้น</span></div>
+              <div className="flex"><span className="w-20">จำนวนสั่งผลิต</span> <span className="text-blue-600">{(job.totalProduction || 0).toLocaleString()} ชิ้น</span></div>
               <div className="flex"><span className="w-20">กำหนดจบผลิต</span> <span className="text-blue-600">{job.endDate ? new Date(job.endDate).toLocaleString('th-TH', { day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }) : '-'} น.</span></div>
             </div>
           </div>

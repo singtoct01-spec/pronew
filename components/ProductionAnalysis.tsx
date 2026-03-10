@@ -72,7 +72,7 @@ export const ProductionAnalysis: React.FC<ProductionAnalysisProps> = ({ jobs }) 
                       <div className="text-xs text-slate-500">{job.moldCode}</div>
                     </td>
                     <td className="px-6 py-4 text-slate-600">{job.jobOrder}</td>
-                    <td className="px-6 py-4 text-right font-mono">{job.totalProduction.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right font-mono">{(job.totalProduction || 0).toLocaleString()}</td>
                     <td className="px-6 py-4 text-right font-mono font-bold text-slate-800">
                       {(job.actualProduction || 0).toLocaleString()}
                     </td>

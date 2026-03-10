@@ -225,7 +225,7 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, inventory, boms, onEdi
                 </td>
                 <td className="px-4 py-4">{getStatusBadge(job.status)}</td>
                 <td className="px-4 py-4 text-right font-mono text-slate-600">
-                  {job.totalProduction.toLocaleString()}
+                  {(job.totalProduction || 0).toLocaleString()}
                 </td>
                 <td className="px-4 py-4 text-right font-mono text-slate-800">
                   {job.actualProduction ? job.actualProduction.toLocaleString() : '-'}

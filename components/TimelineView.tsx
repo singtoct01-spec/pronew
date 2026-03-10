@@ -585,7 +585,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-slate-500">ความคืบหน้า</span>
                   <span className="font-bold text-slate-700">
-                    {hoveredJob.job.actualProduction?.toLocaleString() || 0} / {hoveredJob.job.totalProduction.toLocaleString()}
+                    {(hoveredJob.job.actualProduction || 0).toLocaleString()} / {(hoveredJob.job.totalProduction || 0).toLocaleString()}
                   </span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">

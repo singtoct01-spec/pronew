@@ -125,9 +125,9 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
                   </div>
                   <div className="text-sm text-slate-600 truncate">รหัสงาน: {job.id}</div>
                   <div className="mt-2 flex justify-between items-center text-xs">
-                    <span className="text-slate-500">เป้าหมาย: {job.totalProduction.toLocaleString()}</span>
-                    <span className={`font-bold ${job.actualProduction >= getExpectedProduction(job) ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {job.actualProduction.toLocaleString()}
+                    <span className="text-slate-500">เป้าหมาย: {(job.totalProduction || 0).toLocaleString()}</span>
+                    <span className={`font-bold ${(job.actualProduction || 0) >= getExpectedProduction(job) ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {(job.actualProduction || 0).toLocaleString()}
                     </span>
                   </div>
                 </button>
@@ -144,7 +144,7 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">เป้าหมายรวม</p>
-                  <p className="text-2xl font-mono font-bold text-slate-800">{selectedJob.totalProduction.toLocaleString()}</p>
+                  <p className="text-2xl font-mono font-bold text-slate-800">{(selectedJob.totalProduction || 0).toLocaleString()}</p>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">เป้าหมายรายชั่วโมง</p>
@@ -176,7 +176,7 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
                   </div>
                   <div className="text-right">
                     <p className="text-3xl font-mono font-bold text-slate-800">
-                      {currentActual.toLocaleString()} <span className="text-lg text-slate-400">/ {selectedJob.totalProduction.toLocaleString()}</span>
+                      {currentActual.toLocaleString()} <span className="text-lg text-slate-400">/ {(selectedJob.totalProduction || 0).toLocaleString()}</span>
                     </p>
                   </div>
                 </div>

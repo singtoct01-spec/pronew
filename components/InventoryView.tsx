@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { InventoryItem, ProductBOM } from '../types';
+import { InventoryItem, ProductBOM, ProductSpec } from '../types';
 import { Search, Package, AlertTriangle, Layers, Filter, Upload, FileDown, Plus, Edit2, Trash2, CheckCircle2, ArrowRight, CheckSquare, X, Copy, Printer } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { InventoryItemModal } from './InventoryItemModal';
@@ -8,6 +8,7 @@ import { BomModal } from './BomModal';
 interface InventoryViewProps {
   inventory: InventoryItem[];
   boms: ProductBOM[];
+  productSpecs: ProductSpec[];
   onImportInventory?: (items: any[]) => void;
   onAddInventory?: (item: Omit<InventoryItem, 'id'>) => void;
   onUpdateInventory?: (item: InventoryItem) => void;
@@ -20,6 +21,7 @@ interface InventoryViewProps {
 export const InventoryView: React.FC<InventoryViewProps> = ({ 
   inventory, 
   boms,
+  productSpecs,
   onImportInventory,
   onAddInventory,
   onUpdateInventory,
@@ -709,6 +711,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         initialData={editingBom}
         inventory={inventory}
         boms={boms}
+        productSpecs={productSpecs}
       />
 
       {/* Bulk Edit Modal */}
