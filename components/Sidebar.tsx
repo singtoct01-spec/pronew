@@ -2,7 +2,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Table, Calendar, Activity, ClipboardList, PackageSearch, History, Clock, Database, TrendingUp, FileText, AlertOctagon, Users } from 'lucide-react';
+import { LayoutDashboard, Table, Calendar, Activity, ClipboardList, PackageSearch, History, Clock, Database, TrendingUp, FileText, AlertOctagon, Users, BrainCircuit } from 'lucide-react';
 import { AppUser } from '../types';
 
 interface SidebarProps {
@@ -32,6 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, cur
     { id: 'schedule', label: 'ไทม์ไลน์ (Timeline)', icon: <Calendar size={20} /> },
     { id: 'inventory', label: 'สินค้าคงเหลือ (FG) & วัตถุดิบ', icon: <PackageSearch size={20} /> },
     { id: 'master-data', label: 'ฐานข้อมูลหลัก (Master)', icon: <Database size={20} /> },
+    { id: 'ai-knowledge', label: 'คลังความรู้ AI', icon: <BrainCircuit size={20} /> },
     { id: 'list', label: 'รายการงานทั้งหมด', icon: <Table size={20} /> },
     { id: 'downtime-logs', label: 'บันทึกเครื่องจักรขัดข้อง', icon: <AlertOctagon size={20} /> },
     { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },

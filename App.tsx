@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, orderBy, getDocs, addDoc, Timestamp, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, orderBy, getDocs, addDoc, Timestamp, writeBatch, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { Sidebar } from './components/Sidebar';
 import { DashboardStats } from './components/DashboardStats';
@@ -30,9 +30,11 @@ import { PlanVsActualDashboard } from './components/PlanVsActualDashboard';
 import { Login } from './components/Login';
 import { UserManagement } from './components/UserManagement';
 import { ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM, AppUser } from './types';
-import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X, LogOut, Users } from 'lucide-react';
+import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X, LogOut, Users, BrainCircuit } from 'lucide-react';
 
-export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users';
+import { AiKnowledgeBase } from './components/AiKnowledgeBase';
+
+export type ViewState = 'dashboard' | 'plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'ai-knowledge' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users';
 
 const App: React.FC = () => {
   const location = useLocation();
@@ -282,12 +284,25 @@ const App: React.FC = () => {
 
   const handleAddCustomKnowledge = async (topic: string, content: string) => {
     try {
-      await addDoc(collection(db, 'customKnowledge'), {
-        topic,
-        content,
-        updatedAt: new Date().toISOString(),
-        createdBy: 'AI Assistant'
-      });
+      // Check if topic already exists
+      const existing = customKnowledge.find(k => k.topic.toLowerCase() === topic.toLowerCase());
+      
+      if (existing) {
+        // Append content to existing topic
+        await updateDoc(doc(db, 'customKnowledge', existing.id), {
+          content: existing.content + '\n\n' + content,
+          updatedAt: new Date().toISOString(),
+          createdBy: 'AI Assistant'
+        });
+      } else {
+        // Create new topic
+        await addDoc(collection(db, 'customKnowledge'), {
+          topic,
+          content,
+          updatedAt: new Date().toISOString(),
+          createdBy: 'AI Assistant'
+        });
+      }
     } catch (error) {
       console.error("Error adding custom knowledge:", error);
     }
@@ -612,11 +627,13 @@ const App: React.FC = () => {
 
   const handleSaveKnowledge = async (knowledge: Omit<CustomKnowledge, 'id' | 'updatedAt'>, id?: string) => {
     try {
+      const existing = id ? customKnowledge.find(k => k.id === id) : null;
       const newKnowledge: CustomKnowledge = {
         id: id || `know-${Date.now()}`,
         topic: knowledge.topic,
         content: knowledge.content,
         updatedAt: new Date().toISOString(),
+        createdBy: existing?.createdBy || currentUser?.name || 'User',
       };
       await setDoc(doc(db, 'customKnowledge', newKnowledge.id), newKnowledge);
       alert('บันทึกข้อมูลความรู้สำเร็จ');
@@ -875,6 +892,7 @@ const App: React.FC = () => {
                         { id: 'machines', label: 'สถานะเครื่องจักร', icon: <Cpu size={20} /> },
                         { id: 'inventory', label: 'สินค้าคงเหลือ (FG) & วัตถุดิบ', icon: <Package size={20} /> },
                         { id: 'master-data', label: 'ฐานข้อมูลหลัก', icon: <Settings size={20} /> },
+                        { id: 'ai-knowledge', label: 'คลังความรู้ AI', icon: <BrainCircuit size={20} /> },
                         { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
                         { id: 'history', label: 'ประวัติการทำงาน', icon: <History size={20} /> },
                     ]
@@ -943,6 +961,7 @@ const App: React.FC = () => {
                      currentView === 'custom-form' ? customForm?.title || 'เอกสาร' :
                      currentView === 'form-templates' ? 'แบบฟอร์มเอกสาร (Form Templates)' :
                      currentView === 'master-data' ? 'ฐานข้อมูลหลัก (Master Data)' :
+                     currentView === 'ai-knowledge' ? 'คลังความรู้ AI (AI Knowledge Base)' :
                      currentView === 'machines' ? 'สถานะเครื่องจักร' : 
                      currentView === 'users' ? 'จัดการผู้ใช้งาน' : 'ตั้งค่า'}
                 </h1>
@@ -1037,6 +1056,7 @@ const App: React.FC = () => {
             />
           } />
           <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} productSpecs={productSpecs} machineCapabilities={machineCapabilities} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} onAddBom={handleAddBom} onUpdateBom={handleUpdateBom} onDeleteBom={handleDeleteBom} />} />
+          <Route path="/ai-knowledge" element={<AiKnowledgeBase customKnowledge={customKnowledge} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
           <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} jobs={jobs} />} />
           <Route path="/downtime-logs" element={<DowntimeLogsView logs={downtimeLogs} />} />
           <Route path="/form-templates" element={

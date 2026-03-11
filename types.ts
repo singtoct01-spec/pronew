@@ -225,6 +225,7 @@ export interface CustomKnowledge {
   topic: string;
   content: string;
   updatedAt: string;
+  createdBy?: string;
 }
 // ----------------------------------
 
