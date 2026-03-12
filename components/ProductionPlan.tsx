@@ -119,7 +119,13 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
 
   // Sort jobs within each machine by date
   Object.keys(groupedJobs).forEach(machineId => {
-    groupedJobs[machineId].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    groupedJobs[machineId].sort((a, b) => {
+      const dateA = new Date(a.startDate).getTime();
+      const dateB = new Date(b.startDate).getTime();
+      if (isNaN(dateA)) return 1;
+      if (isNaN(dateB)) return -1;
+      return dateA - dateB;
+    });
   });
 
   // --- Helpers ---
@@ -186,6 +192,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
     if (!start || !end) return 0;
     const s = new Date(start).getTime();
     const e = new Date(end).getTime();
+    if (isNaN(s) || isNaN(e)) return 0;
     // Use SIMULATED_NOW for time reference
     const now = SIMULATED_NOW.getTime(); 
     if (now < s) return 0;
@@ -197,17 +204,22 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
     if (!start || !end) return 0;
     const s = new Date(start).getTime();
     const e = new Date(end).getTime();
+    if (isNaN(s) || isNaN(e)) return 0;
     return Math.round((e - s) / (1000 * 60 * 60));
   };
 
   const checkOverlap = (currentJob: ProductionJob, allMachineJobs: ProductionJob[]) => {
+    if (!currentJob.startDate || !currentJob.endDate) return false;
     const start = new Date(currentJob.startDate).getTime();
     const end = new Date(currentJob.endDate).getTime();
+    if (isNaN(start) || isNaN(end)) return false;
 
     return allMachineJobs.some(otherJob => {
         if (otherJob.id === currentJob.id) return false;
+        if (!otherJob.startDate || !otherJob.endDate) return false;
         const otherStart = new Date(otherJob.startDate).getTime();
         const otherEnd = new Date(otherJob.endDate).getTime();
+        if (isNaN(otherStart) || isNaN(otherEnd)) return false;
         return (start < otherEnd && end > otherStart);
     });
   };

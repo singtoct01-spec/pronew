@@ -1,33 +1,56 @@
 import React, { useState } from 'react';
-import { CustomKnowledge } from '../types';
-import { Search, BookOpen, Plus, Trash2, Edit2, BrainCircuit } from 'lucide-react';
+import { CustomKnowledge, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability } from '../types';
+import { Search, BookOpen, Plus, Trash2, Edit2, BrainCircuit, Tag, Folder, Link as LinkIcon, X } from 'lucide-react';
 
 interface AiKnowledgeBaseProps {
   customKnowledge: CustomKnowledge[];
+  inventory: InventoryItem[];
+  boms: ProductBOM[];
+  productSpecs: ProductSpec[];
+  machineCapabilities: MachineMoldCapability[];
   onSaveKnowledge: (knowledge: Omit<CustomKnowledge, 'id' | 'updatedAt'>, id?: string) => void;
   onDeleteKnowledge: (id: string) => void;
 }
 
+const CATEGORIES = ['ทั่วไป', 'เครื่องจักร', 'คุณภาพ (QC)', 'ความปลอดภัย', 'กระบวนการผลิต', 'อื่นๆ'];
+
 export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({ 
   customKnowledge, 
+  inventory,
+  boms,
+  productSpecs,
+  machineCapabilities,
   onSaveKnowledge, 
   onDeleteKnowledge 
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('ทั้งหมด');
   const [isAddingKnowledge, setIsAddingKnowledge] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newTopic, setNewTopic] = useState('');
   const [newContent, setNewContent] = useState('');
+  const [newCategory, setNewCategory] = useState('ทั่วไป');
+  const [newTags, setNewTags] = useState('');
+  const [newLinkedData, setNewLinkedData] = useState<NonNullable<CustomKnowledge['linkedData']>>([]);
+  const [linkSearchTerm, setLinkSearchTerm] = useState('');
+  const [linkType, setLinkType] = useState<'Machine' | 'Product' | 'Inventory' | 'BOM'>('Machine');
 
-  const filteredKnowledge = customKnowledge.filter(k => 
-    k.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.content.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredKnowledge = customKnowledge.filter(k => {
+    const matchesSearch = k.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          k.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (k.tags && k.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())));
+    const matchesCategory = filterCategory === 'ทั้งหมด' || k.category === filterCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   const handleOpenAdd = () => {
     setEditingId(null);
     setNewTopic('');
     setNewContent('');
+    setNewCategory('ทั่วไป');
+    setNewTags('');
+    setNewLinkedData([]);
+    setLinkSearchTerm('');
     setIsAddingKnowledge(true);
   };
 
@@ -35,11 +58,17 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
     setEditingId(k.id);
     setNewTopic(k.topic);
     setNewContent(k.content);
+    setNewCategory(k.category || 'ทั่วไป');
+    setNewTags(k.tags ? k.tags.join(', ') : '');
+    setNewLinkedData(k.linkedData || []);
+    setLinkSearchTerm('');
     setIsAddingKnowledge(true);
   };
 
   const handleSave = () => {
     if (!newTopic.trim() || !newContent.trim()) return;
+    
+    const tagsArray = newTags.split(',').map(t => t.trim()).filter(t => t !== '');
     
     // Check if topic already exists (when adding new)
     if (!editingId) {
@@ -48,19 +77,37 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
         // Append to existing
         onSaveKnowledge({
           topic: existing.topic,
-          content: existing.content + '\n\n' + newContent
+          content: existing.content + '\n\n' + newContent,
+          category: newCategory,
+          tags: tagsArray,
+          linkedData: [...(existing.linkedData || []), ...newLinkedData].filter((v, i, a) => a.findIndex(t => (t.id === v.id && t.type === v.type)) === i)
         }, existing.id);
       } else {
         // Create new
-        onSaveKnowledge({ topic: newTopic, content: newContent });
+        onSaveKnowledge({ 
+          topic: newTopic, 
+          content: newContent,
+          category: newCategory,
+          tags: tagsArray,
+          linkedData: newLinkedData
+        });
       }
     } else {
       // Update existing
-      onSaveKnowledge({ topic: newTopic, content: newContent }, editingId);
+      onSaveKnowledge({ 
+        topic: newTopic, 
+        content: newContent,
+        category: newCategory,
+        tags: tagsArray,
+        linkedData: newLinkedData
+      }, editingId);
     }
 
     setNewTopic('');
     setNewContent('');
+    setNewCategory('ทั่วไป');
+    setNewTags('');
+    setNewLinkedData([]);
     setIsAddingKnowledge(false);
     setEditingId(null);
   };
@@ -84,24 +131,39 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                 <p className="text-sm text-slate-500">ข้อมูลและกฎเกณฑ์ที่ AI เรียนรู้จากผู้ใช้งาน</p>
               </div>
            </div>
-           <div className="flex items-center gap-3 w-full md:w-auto">
-              <button 
-                onClick={handleOpenAdd}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-              >
-                <Plus size={16} />
-                เพิ่มข้อมูลให้ AI
-              </button>
+           <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+              <div className="flex bg-white rounded-lg border border-slate-200 p-1">
+                {['ทั้งหมด', ...CATEGORIES].map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setFilterCategory(cat)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      filterCategory === cat 
+                        ? 'bg-indigo-50 text-indigo-700' 
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input 
                   type="text" 
-                  placeholder="ค้นหาหัวข้อ หรือเนื้อหา..." 
+                  placeholder="ค้นหาหัวข้อ เนื้อหา หรือแท็ก..." 
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 />
               </div>
+              <button 
+                onClick={handleOpenAdd}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 w-full md:w-auto justify-center"
+              >
+                <Plus size={16} />
+                เพิ่มข้อมูลให้ AI
+              </button>
            </div>
         </div>
 
@@ -119,13 +181,41 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                     </button>
                   </div>
                   <h3 className="font-bold text-slate-800 mb-2 pr-16 flex items-center gap-2">
-                    <BookOpen size={16} className="text-indigo-500" />
-                    {k.topic}
+                    <BookOpen size={16} className="text-indigo-500 shrink-0" />
+                    <span className="truncate">{k.topic}</span>
                   </h3>
-                  <div className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 flex-1 overflow-y-auto max-h-48">
+                  {k.category && (
+                    <div className="mb-3">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-600 text-xs font-medium">
+                        <Folder size={12} />
+                        {k.category}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-3 rounded-lg border border-slate-100 flex-1 overflow-y-auto max-h-48 mb-3">
                     {k.content}
                   </div>
-                  <div className="mt-4 text-[10px] text-slate-400 flex justify-between items-center pt-3 border-t border-slate-100">
+                  {k.tags && k.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {k.tags.map((tag, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-medium border border-indigo-100">
+                          <Tag size={10} />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {k.linkedData && k.linkedData.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {k.linkedData.map((link, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200" title={`Linked to ${link.type}`}>
+                          <LinkIcon size={10} className="text-slate-400" />
+                          {link.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-auto text-[10px] text-slate-400 flex justify-between items-center pt-3 border-t border-slate-100">
                     <span>อัปเดตล่าสุด: {new Date(k.updatedAt).toLocaleString('th-TH')}</span>
                     {k.createdBy && <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{k.createdBy}</span>}
                   </div>
@@ -173,6 +263,18 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                 </div>
               )}
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">หมวดหมู่ (Category)</label>
+                <select 
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
+                >
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">หัวข้อ (Topic)</label>
                 <input 
                   type="text" 
@@ -188,9 +290,140 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
                   placeholder="พิมพ์ข้อมูลที่คุณต้องการให้ AI จดจำ..."
-                  rows={8}
+                  rows={6}
                   className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all resize-none"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">แท็ก (Tags) <span className="text-slate-400 font-normal">- คั่นด้วยเครื่องหมายจุลภาค (,)</span></label>
+                <input 
+                  type="text" 
+                  value={newTags}
+                  onChange={(e) => setNewTags(e.target.value)}
+                  placeholder="เช่น IP1, ความปลอดภัย, แม่พิมพ์"
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                />
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                  <LinkIcon size={16} /> เชื่อมโยงกับข้อมูลหลัก (Data Linking)
+                </label>
+                
+                {/* Current Links */}
+                {newLinkedData.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {newLinkedData.map((link, idx) => (
+                      <div key={idx} className="flex items-center gap-1 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg text-xs">
+                        <span className="font-medium text-slate-600">{link.type}:</span>
+                        <span className="text-slate-800">{link.name}</span>
+                        <button 
+                          onClick={() => setNewLinkedData(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-slate-400 hover:text-red-500 ml-1"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add Link Controls */}
+                <div className="flex gap-2 mb-2">
+                  <select 
+                    value={linkType}
+                    onChange={(e) => setLinkType(e.target.value as any)}
+                    className="p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"
+                  >
+                    <option value="Machine">เครื่องจักร (Machine)</option>
+                    <option value="Product">สินค้า (Product Spec)</option>
+                    <option value="Inventory">วัตถุดิบ (Inventory)</option>
+                    <option value="BOM">สูตรการผลิต (BOM)</option>
+                  </select>
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <input 
+                      type="text"
+                      placeholder="ค้นหาเพื่อเชื่อมโยง..."
+                      value={linkSearchTerm}
+                      onChange={(e) => setLinkSearchTerm(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Search Results */}
+                {linkSearchTerm && (
+                  <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg bg-white shadow-sm">
+                    {linkType === 'Machine' && Array.from(new Set(machineCapabilities.map(m => m.machineGroup)))
+                      .filter(m => m.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .map(m => (
+                      <div 
+                        key={m}
+                        onClick={() => {
+                          if (!newLinkedData.find(l => l.type === 'Machine' && l.id === m)) {
+                            setNewLinkedData(prev => [...prev, { type: 'Machine', id: m, name: m }]);
+                          }
+                          setLinkSearchTerm('');
+                        }}
+                        className="p-2 hover:bg-slate-50 cursor-pointer text-sm border-b border-slate-100 last:border-0"
+                      >
+                        {m}
+                      </div>
+                    ))}
+                    
+                    {linkType === 'Product' && productSpecs
+                      .filter(p => p.code.toLowerCase().includes(linkSearchTerm.toLowerCase()) || p.name.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .map(p => (
+                      <div 
+                        key={p.code}
+                        onClick={() => {
+                          if (!newLinkedData.find(l => l.type === 'Product' && l.id === p.code)) {
+                            setNewLinkedData(prev => [...prev, { type: 'Product', id: p.code, name: `${p.code} - ${p.name}` }]);
+                          }
+                          setLinkSearchTerm('');
+                        }}
+                        className="p-2 hover:bg-slate-50 cursor-pointer text-sm border-b border-slate-100 last:border-0"
+                      >
+                        {p.code} - {p.name}
+                      </div>
+                    ))}
+
+                    {linkType === 'Inventory' && inventory
+                      .filter(i => i.code.toLowerCase().includes(linkSearchTerm.toLowerCase()) || i.name.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .map(i => (
+                      <div 
+                        key={i.id}
+                        onClick={() => {
+                          if (!newLinkedData.find(l => l.type === 'Inventory' && l.id === i.id)) {
+                            setNewLinkedData(prev => [...prev, { type: 'Inventory', id: i.id, name: `${i.code} - ${i.name}` }]);
+                          }
+                          setLinkSearchTerm('');
+                        }}
+                        className="p-2 hover:bg-slate-50 cursor-pointer text-sm border-b border-slate-100 last:border-0"
+                      >
+                        {i.code} - {i.name}
+                      </div>
+                    ))}
+
+                    {linkType === 'BOM' && boms
+                      .filter(b => b.productItem.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .map(b => (
+                      <div 
+                        key={b.id || b.productItem}
+                        onClick={() => {
+                          if (!newLinkedData.find(l => l.type === 'BOM' && l.id === (b.id || b.productItem))) {
+                            setNewLinkedData(prev => [...prev, { type: 'BOM', id: b.id || b.productItem, name: b.productItem }]);
+                          }
+                          setLinkSearchTerm('');
+                        }}
+                        className="p-2 hover:bg-slate-50 cursor-pointer text-sm border-b border-slate-100 last:border-0"
+                      >
+                        {b.productItem}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -13,23 +13,33 @@ export const MachineGrid: React.FC<MachineGridProps> = ({ jobs, onEditJob }) => 
 
   const getMachineStatus = (machineId: string) => {
     // Find job active at SIMULATED_NOW
-    const activeJob = jobs.find(j => 
-      j.machineId === machineId && 
-      new Date(j.startDate) <= SIMULATED_NOW && 
-      new Date(j.endDate) >= SIMULATED_NOW
-    );
+    const activeJob = jobs.find(j => {
+      if (!j.startDate || !j.endDate) return false;
+      const start = new Date(j.startDate);
+      const end = new Date(j.endDate);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+      return start <= SIMULATED_NOW && end >= SIMULATED_NOW;
+    });
     
     // If no active job, find the next one or the last one
-    const nextJob = !activeJob ? jobs.find(j => j.machineId === machineId && new Date(j.startDate) > SIMULATED_NOW) : null;
+    const nextJob = !activeJob ? jobs.find(j => {
+      if (!j.startDate) return false;
+      const start = new Date(j.startDate);
+      if (isNaN(start.getTime())) return false;
+      return start > SIMULATED_NOW && j.machineId === machineId;
+    }) : null;
     
     return { activeJob, nextJob };
   };
 
   const getProgress = (start: string, end: string) => {
+    if (!start || !end) return 0;
     const s = new Date(start).getTime();
     const e = new Date(end).getTime();
+    if (isNaN(s) || isNaN(e)) return 0;
     const now = SIMULATED_NOW.getTime();
     const total = e - s;
+    if (total <= 0) return 0;
     const elapsed = now - s;
     return Math.min(Math.max((elapsed / total) * 100, 0), 100);
   };

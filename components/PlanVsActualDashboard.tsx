@@ -19,7 +19,7 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
     return () => clearInterval(timer);
   }, []);
 
-  const activeJobs = jobs.filter(j => j.status === 'In Progress' || j.status === 'Paused');
+  const activeJobs = jobs.filter(j => j.status === 'Running');
 
   useEffect(() => {
     if (!selectedJobId && activeJobs.length > 0) {
@@ -57,8 +57,10 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
 
   // Calculate hourly target based on total production and duration
   const getHourlyTarget = (job: ProductionJob) => {
+    if (!job.startDate || !job.endDate) return job.totalProduction;
     const start = new Date(job.startDate);
     const end = new Date(job.endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return job.totalProduction;
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     if (durationHours <= 0) return job.totalProduction;
     return Math.round(job.totalProduction / durationHours);
@@ -69,8 +71,10 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
   
   // Estimate expected production at current time
   const getExpectedProduction = (job: ProductionJob) => {
+    if (!job.startDate || !job.endDate) return 0;
     const start = new Date(job.startDate);
     const end = new Date(job.endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
     if (now < start) return 0;
     if (now > end) return job.totalProduction;
     
@@ -123,7 +127,7 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
                       {job.machineId}
                     </span>
                   </div>
-                  <div className="text-sm text-slate-600 truncate">รหัสงาน: {job.id}</div>
+                  <div className="text-sm text-slate-600 truncate">รหัสงาน: {job.jobOrder}</div>
                   <div className="mt-2 flex justify-between items-center text-xs">
                     <span className="text-slate-500">เป้าหมาย: {(job.totalProduction || 0).toLocaleString()}</span>
                     <span className={`font-bold ${(job.actualProduction || 0) >= getExpectedProduction(job) ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -172,7 +176,7 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
                 <div className="flex justify-between items-end mb-2">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">ความคืบหน้า: {selectedJob.productItem}</h3>
-                    <p className="text-sm text-slate-500">รหัสงาน: {selectedJob.id}</p>
+                    <p className="text-sm text-slate-500">รหัสงาน: {selectedJob.jobOrder}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-3xl font-mono font-bold text-slate-800">

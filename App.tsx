@@ -282,15 +282,25 @@ const App: React.FC = () => {
     saveNewMessages();
   }, [aiMessages, historyLoaded]);
 
-  const handleAddCustomKnowledge = async (topic: string, content: string) => {
+  const handleAddCustomKnowledge = async (topic: string, content: string, linkedData?: { type: string, id: string, name: string }[]) => {
     try {
       // Check if topic already exists
       const existing = customKnowledge.find(k => k.topic.toLowerCase() === topic.toLowerCase());
       
       if (existing) {
         // Append content to existing topic
+        const updatedLinkedData = existing.linkedData ? [...existing.linkedData] : [];
+        if (linkedData) {
+          linkedData.forEach(newLink => {
+            if (!updatedLinkedData.some(link => link.id === newLink.id && link.type === newLink.type)) {
+              updatedLinkedData.push(newLink);
+            }
+          });
+        }
+
         await updateDoc(doc(db, 'customKnowledge', existing.id), {
           content: existing.content + '\n\n' + content,
+          linkedData: updatedLinkedData,
           updatedAt: new Date().toISOString(),
           createdBy: 'AI Assistant'
         });
@@ -299,6 +309,9 @@ const App: React.FC = () => {
         await addDoc(collection(db, 'customKnowledge'), {
           topic,
           content,
+          category: 'ทั่วไป',
+          tags: [],
+          linkedData: linkedData || [],
           updatedAt: new Date().toISOString(),
           createdBy: 'AI Assistant'
         });
@@ -632,6 +645,9 @@ const App: React.FC = () => {
         id: id || `know-${Date.now()}`,
         topic: knowledge.topic,
         content: knowledge.content,
+        category: knowledge.category || 'ทั่วไป',
+        tags: knowledge.tags || [],
+        linkedData: knowledge.linkedData || [],
         updatedAt: new Date().toISOString(),
         createdBy: existing?.createdBy || currentUser?.name || 'User',
       };
@@ -1056,7 +1072,7 @@ const App: React.FC = () => {
             />
           } />
           <Route path="/master-data" element={<KnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} productSpecs={productSpecs} machineCapabilities={machineCapabilities} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} onAddBom={handleAddBom} onUpdateBom={handleUpdateBom} onDeleteBom={handleDeleteBom} />} />
-          <Route path="/ai-knowledge" element={<AiKnowledgeBase customKnowledge={customKnowledge} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
+          <Route path="/ai-knowledge" element={<AiKnowledgeBase customKnowledge={customKnowledge} inventory={inventory} boms={boms} productSpecs={productSpecs} machineCapabilities={machineCapabilities} onSaveKnowledge={handleSaveKnowledge} onDeleteKnowledge={handleDeleteKnowledge} />} />
           <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} jobs={jobs} />} />
           <Route path="/downtime-logs" element={<DowntimeLogsView logs={downtimeLogs} />} />
           <Route path="/form-templates" element={

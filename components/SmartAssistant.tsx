@@ -27,7 +27,7 @@ interface SmartAssistantProps {
   onBatchUpsert?: (jobs: ProductionJob[]) => Promise<boolean> | void;
   onGenerateForm?: (html: string, title: string) => void;
   onLogDowntime?: (data: any) => void;
-  onAddKnowledge?: (topic: string, content: string) => void;
+  onAddKnowledge?: (topic: string, content: string, linkedData?: { type: string, id: string, name: string }[]) => void;
   onAddBom?: (bom: Omit<ProductBOM, 'id'>) => void;
   onUpdateBom?: (bom: ProductBOM) => void;
   onDeleteBom?: (id: string) => void;
@@ -85,9 +85,33 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<UploadedFile | null>(null);
+  const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('USER_GEMINI_API_KEY') || '');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSetApiKey = () => {
+    const key = window.prompt('กรุณาใส่ Gemini API Key ของคุณ:\n(สามารถรับฟรีได้ที่ https://aistudio.google.com/app/apikey)', customApiKey);
+    if (key !== null) {
+      const trimmedKey = key.trim();
+      setCustomApiKey(trimmedKey);
+      if (trimmedKey) {
+        localStorage.setItem('USER_GEMINI_API_KEY', trimmedKey);
+        setMessages(prev => [...prev, { 
+          role: 'model', 
+          text: '✅ บันทึก API Key ของคุณเรียบร้อยแล้วครับ ลองพิมพ์คำถามได้เลย', 
+          timestamp: new Date().toISOString() 
+        }]);
+      } else {
+        localStorage.removeItem('USER_GEMINI_API_KEY');
+        setMessages(prev => [...prev, { 
+          role: 'model', 
+          text: 'ลบ API Key ของคุณแล้ว ระบบจะกลับไปใช้ Key เริ่มต้น (ถ้ามี)', 
+          timestamp: new Date().toISOString() 
+        }]);
+      }
+    }
+  };
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -225,14 +249,28 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
             machineMoldCapabilities: machineCapabilities
         },
         savedFormTemplates: formTemplates?.map(f => ({ id: f.id, title: f.title, html: f.html })) || [],
-        customKnowledge: customKnowledge?.map(k => ({ topic: k.topic, content: k.content })) || [],
+        customKnowledge: customKnowledge?.map(k => ({ topic: k.topic, content: k.content, linkedData: k.linkedData })) || [],
         downtimeHistory: downtimeLogs?.map(d => ({ machineId: d.machineId, date: d.date, durationMinutes: d.durationMinutes, category: d.category, reason: d.reason })) || []
       };
 
       // 2. Initialize Gemini
-      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+      // Support both AI Studio environment and standard Vite deployments
+      let apiKey = customApiKey;
+      
       if (!apiKey) {
-        setMessages(prev => [...prev, { role: 'model', text: 'ไม่พบ API Key ในระบบ กรุณาติดต่อผู้ดูแลระบบ', timestamp: new Date().toISOString() }]);
+        try {
+          apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+        } catch (e) {
+          // Ignore if process is not defined
+        }
+      }
+      
+      if (!apiKey) {
+        apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.VITE_API_KEY || '';
+      }
+
+      if (!apiKey) {
+        setMessages(prev => [...prev, { role: 'model', text: 'ไม่พบ API Key ในระบบ กรุณากดปุ่ม "🔑 เปลี่ยน API Key" ด้านบนเพื่อใส่ Key ของคุณเองครับ\n\n(รับฟรีได้ที่ https://aistudio.google.com/app/apikey)', timestamp: new Date().toISOString() }]);
         setIsLoading(false);
         return;
       }
@@ -254,7 +292,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         - **Product Specs:** You know which Bottle (Jar) uses which Preform. (e.g., A01 uses P45).
         - **Machine Caps:** You know AB1 runs at ~800/hr, but IP machines might run differently.
         - **Colors:** You know changing from Black -> White is a nightmare (needs heavy cleaning).
-        - **Custom Knowledge:** Pay special attention to the \`customKnowledge\` array in the context. This contains specific rules, warnings, or facts added by the user. Always prioritize these custom rules when answering or planning.
+        - **Custom Knowledge:** Pay special attention to the \`customKnowledge\` array in the context. This contains specific rules, warnings, or facts added by the user. 
+          - **Data Linking:** Some knowledge items have \`linkedData\` attached (e.g., linked to a specific Machine, Product, Inventory item, or BOM). If a user asks about a specific machine (e.g., "IP1"), you MUST check if there is any custom knowledge linked to "IP1" and apply it to your answer. Always prioritize these custom rules when answering or planning.
 
         **PREDICTIVE ANALYTICS (FORECASTING):**
         - You have access to \`downtimeHistory\` and current \`jobs\`.
@@ -267,6 +306,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         2. **Breakdowns:** If a machine is 'Maintenance' (like AB7 is now), do not suggest putting jobs on it until repaired.
         3. **Optimization:** If you see short runs of different colors on one machine, suggest grouping them to save setup time.
         4. **Realism:** If a plan is impossible (e.g., producing 100k in 1 hour), say it's impossible.
+        5. **Update Actuals:** If the user provides the *total* actual production for a job (e.g., "ยอดรวมตอนนี้ 60,000"), you MUST calculate the difference between the new total and the current \`actualProduction\`, and call \`updateActualProduction\` with the *difference* (e.g., actuals = 5325). Only update jobs that are currently 'Running'. If the machine is not running, warn the user.
 
         **DATA INTERPRETATION:**
         - \`actualProduced\` = Current output so far.
@@ -317,6 +357,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           - **Borders:** Use \`border: 1px solid #000;\` for all cells. No soft gray borders.
         - **Confirmation:** Before generating the HTML, briefly describe what you "see" to reassure the user (e.g., "ผมเห็นเอกสาร 'ใบสั่งผลิต' ที่มี 5 คอลัมน์: ลำดับ, รายการ, จำนวน... กำลังสร้างแบบฟอร์มให้เหมือนเป๊ะครับ").
         - **Action:** Return a JSON action with \`type: 'GENERATE_FORM'\`, \`html: '<div class=\"excel-like-content\">...</div>'\`, and \`title: 'Form Title'\`.
+        - **CRITICAL: HTML SIZE LIMIT:** The generated HTML must be concise. Do not generate thousands of empty rows. Generate only the rows visible in the image, or a maximum of 10 empty rows for filling. Avoid excessive inline styles; use the provided CSS classes (e.g., \`text-center\`, \`font-bold\`, \`bg-gray\`).
         
         - If the user asks to use an existing form template, refer to \`savedFormTemplates\`. Generate a new form by taking the saved \`html\` and modifying it to insert the requested data.
         
@@ -344,7 +385,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         \`\`\`
 
         **IMAGE EXTRACTION & VISION RULES:**
-        - **Data Extraction:** When extracting from images, you MUST extract ALL columns including "ยอดการผลิตได้" (actualProduction), "Cap ต่อกะ" (capacityPerShift), "รหัสแม่พิมพ์" (moldCode), "สี" (color), and "หมายเหตุ" (remarks). Do not leave them out.
+        - **Data Extraction:** When extracting from images or Excel files, you MUST extract ALL columns including "ชื่อสินค้า" (productItem), "ยอดการผลิตได้" (actualProduction), "Cap ต่อกะ" (capacityPerShift), "รหัสแม่พิมพ์" (moldCode), "สี" (color), and "หมายเหตุ" (remarks). Do not leave them out.
         - **Form Templates:** If the image is a form template and the user wants to create a form based on it, extract its structure and generate a \`GENERATE_FORM\` action.
         - **Quality Control (Defects):** If the user uploads an image of a defective product (NG/Defect), analyze the visual anomaly (e.g., black spots, short shot, flash, scratches, bubbles). Explain the possible root causes based on plastic injection/blow molding principles, and suggest immediate troubleshooting steps.
         - **Machine Error Screens:** If the user uploads an image of a machine error screen or alarm, read the error code/message, explain what it means, and suggest how to fix it. If it implies downtime, you can propose a \`LOG_DOWNTIME\` action.
@@ -483,7 +524,20 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           type: Type.OBJECT,
           properties: {
             topic: { type: Type.STRING, description: "หัวข้อหลัก (เช่น 'Machine AB1', 'Preferences', 'Rules')" },
-            content: { type: Type.STRING, description: "เนื้อหาความรู้ที่ต้องการบันทึก" }
+            content: { type: Type.STRING, description: "เนื้อหาความรู้ที่ต้องการบันทึก" },
+            linkedData: {
+              type: Type.ARRAY,
+              description: "ข้อมูลหลักที่เกี่ยวข้องกับความรู้นี้ (ถ้ามี)",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  type: { type: Type.STRING, description: "ประเภทข้อมูล: Machine, Product, Inventory, BOM" },
+                  id: { type: Type.STRING, description: "รหัสอ้างอิงของข้อมูลนั้นๆ" },
+                  name: { type: Type.STRING, description: "ชื่อของข้อมูลนั้นๆ" }
+                },
+                required: ["type", "id", "name"]
+              }
+            }
           },
           required: ["topic", "content"]
         }
@@ -712,7 +766,17 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         }
       }
 
-      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+      let apiKey = customApiKey;
+      if (!apiKey) {
+        try {
+          apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+        } catch (e) {
+          // Ignore if process is not defined
+        }
+      }
+      if (!apiKey) {
+        apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.VITE_API_KEY || '';
+      }
       const keyHint = apiKey && apiKey.length > 4 
         ? `...${apiKey.slice(-4)}` 
         : '(System Key)';
@@ -748,6 +812,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         _status: `พบข้อมูลในระบบ ${liveJobs.length} จาก ${jobOrders.length} รายการ`,
         liveData: liveJobs.map(j => ({ 
           jobOrder: j.jobOrder, 
+          productItem: j.productItem,
           status: j.status, 
           actual: j.actualProduction, 
           target: j.totalProduction, 
@@ -769,6 +834,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           _status: `พบข้อมูลในระบบ ${liveJobs.length} จากที่ดำเนินการ ${jobOrders.length} รายการ`,
           liveData: liveJobs.map(j => ({ 
             jobOrder: j.jobOrder, 
+            productItem: j.productItem,
             status: j.status, 
             actual: j.actualProduction, 
             target: j.totalProduction, 
@@ -788,6 +854,7 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           _status: 'พบข้อมูลในระบบ (Found)',
           liveData: { 
             jobOrder: liveJob.jobOrder, 
+            productItem: liveJob.productItem,
             status: liveJob.status, 
             actual: liveJob.actualProduction, 
             target: liveJob.totalProduction, 
@@ -803,12 +870,14 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     return action.data;
   };
 
-  const executePendingFunctionCalls = async (calls: any[], msgIndex: number) => {
+  const executePendingFunctionCalls = async (calls: any[], msgIndex: number, callIndexToExecute?: number) => {
     let responseText = '';
     let executedCount = 0;
     let hasError = false;
 
-    for (const call of calls) {
+    const callsToExecute = callIndexToExecute !== undefined ? [calls[callIndexToExecute]] : calls;
+
+    for (const call of callsToExecute) {
       try {
         if (call.name === 'rescheduleMachineJobs') {
           const { machineId, newStartDate } = call.args as any;
@@ -847,22 +916,22 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
           }
         } else if (call.name === 'createJob') {
           const args = call.args as any;
-          const newJob = {
+          const newJob: ProductionJob = {
             id: `job-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             jobOrder: args.jobOrder || `JO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
-            productItem: args.productCode,
-            machineId: args.machineId,
-            targetQuantity: args.targetQuantity,
-            actualProduced: 0,
-            startDate: args.startDate,
-            endDate: args.endDate,
-            status: 'Pending',
-            priority: args.priority || 'Medium',
-            color: 'Clear',
-            mold: 'Standard'
+            productItem: args.productCode || args.productItem || args.product || 'New Item',
+            machineId: args.machineId || 'Unknown',
+            totalProduction: args.targetQuantity || args.totalProduction || 0,
+            actualProduction: 0,
+            capacityPerShift: args.capacityPerShift || args.capacity || 0,
+            startDate: args.startDate || SIMULATED_NOW.toISOString(),
+            endDate: args.endDate || SIMULATED_NOW.toISOString(),
+            status: 'Running',
+            color: args.color || '-',
+            moldCode: args.moldCode || args.mold || 'Standard'
           };
           if (onCreateJob) {
-            onCreateJob(newJob as any);
+            onCreateJob(newJob);
             responseText += `\n✅ สร้างรายการผลิต ${newJob.jobOrder} สำหรับสินค้า ${newJob.productItem} บนเครื่อง ${newJob.machineId} เรียบร้อยแล้ว`;
             executedCount++;
           } else {
@@ -876,8 +945,8 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
            }
         } else if (call.name === 'addKnowledge') {
           if (onAddKnowledge) {
-            const { topic, content } = call.args as any;
-            onAddKnowledge(topic, content);
+            const { topic, content, linkedData } = call.args as any;
+            onAddKnowledge(topic, content, linkedData);
             responseText += `\n✅ บันทึกข้อมูลเรื่อง "${topic}" ไว้ในหน่วยความจำระยะยาวแล้ว`;
             executedCount++;
           }
@@ -933,15 +1002,34 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
 
     setMessages(prev => {
       const newMessages = [...prev];
+      let remainingCalls: any[] | undefined = undefined;
+
       if (newMessages[msgIndex]) {
-        newMessages[msgIndex] = { ...newMessages[msgIndex], pendingFunctionCalls: undefined };
+        if (callIndexToExecute !== undefined) {
+          // Remove only the executed call
+          const updatedCalls = [...calls];
+          updatedCalls.splice(callIndexToExecute, 1);
+          remainingCalls = updatedCalls.length > 0 ? updatedCalls : undefined;
+          
+          // Remove from old message
+          newMessages[msgIndex] = { 
+            ...newMessages[msgIndex], 
+            pendingFunctionCalls: undefined 
+          };
+        } else {
+          // Remove all calls
+          newMessages[msgIndex] = { ...newMessages[msgIndex], pendingFunctionCalls: undefined };
+        }
       }
+      
       newMessages.push({ 
         role: 'model', 
         text: `ดำเนินการเสร็จสิ้น ${executedCount} รายการ:\n${responseText}`, 
         timestamp: new Date().toISOString(),
-        verifiedAction: { type: 'FUNCTION_CALLS_EXECUTED', data: calls }
+        verifiedAction: { type: 'FUNCTION_CALLS_EXECUTED', data: callsToExecute },
+        pendingFunctionCalls: remainingCalls
       });
+      
       return newMessages;
     });
   };
@@ -967,16 +1055,17 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
     } else if (type === 'CREATE') {
       const newJob: ProductionJob = {
          id: `new-${Date.now()}`,
-         machineId: proposal.data?.machineId || 'Unknown',
-         productItem: proposal.data?.productItem || 'New Item',
-         moldCode: proposal.data?.moldCode || '-',
+         machineId: proposal.data?.machineId || proposal.data?.machine || 'Unknown',
+         productItem: proposal.data?.productItem || proposal.data?.product || proposal.data?.item || proposal.data?.productCode || 'New Item',
+         moldCode: proposal.data?.moldCode || proposal.data?.mold || '-',
          jobOrder: proposal.data?.jobOrder || `AUTO-${Date.now()}`,
-         capacityPerShift: 0,
-         totalProduction: proposal.data?.totalProduction || 0,
-         color: '-',
+         capacityPerShift: proposal.data?.capacityPerShift || proposal.data?.capacity || 0,
+         totalProduction: proposal.data?.totalProduction || proposal.data?.target || proposal.data?.targetQuantity || 0,
+         actualProduction: proposal.data?.actualProduction || proposal.data?.actual || proposal.data?.actualProduced || 0,
+         color: proposal.data?.color || '-',
          startDate: proposal.data?.startDate || SIMULATED_NOW.toISOString(),
          endDate: proposal.data?.endDate || SIMULATED_NOW.toISOString(),
-         status: 'Running',
+         status: proposal.data?.status || 'Running',
          ...proposal.data
       };
       onCreateJob(newJob);
@@ -993,18 +1082,28 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
         );
 
         if (targetJob) {
-          const updatedJob = { ...targetJob, ...item, id: targetJob.id };
+          const updatedJob = { 
+            ...targetJob, 
+            ...item, 
+            id: targetJob.id,
+            productItem: item.productItem || item.product || item.item || item.productCode || targetJob.productItem,
+            moldCode: item.moldCode || item.mold || targetJob.moldCode,
+            machineId: item.machineId || item.machine || targetJob.machineId,
+            capacityPerShift: item.capacityPerShift || item.capacity || targetJob.capacityPerShift,
+            totalProduction: item.totalProduction || item.target || item.targetQuantity || targetJob.totalProduction,
+            actualProduction: item.actualProduction || item.actual || item.actualProduced || targetJob.actualProduction,
+          };
           batchJobs.push(updatedJob);
           updated++;
         } else {
           const newJob: ProductionJob = {
-             machineId: item.machineId || 'Unknown',
-             productItem: item.productItem || 'New Item',
-             moldCode: item.moldCode || '-',
+             machineId: item.machineId || item.machine || 'Unknown',
+             productItem: item.productItem || item.product || item.item || item.productCode || 'New Item',
+             moldCode: item.moldCode || item.mold || '-',
              jobOrder: item.jobOrder || `AUTO-${Date.now()}-${index}`,
-             capacityPerShift: item.capacityPerShift || 0,
-             totalProduction: item.totalProduction || 0,
-             actualProduction: item.actualProduction || 0,
+             capacityPerShift: item.capacityPerShift || item.capacity || 0,
+             totalProduction: item.totalProduction || item.target || item.targetQuantity || 0,
+             actualProduction: item.actualProduction || item.actual || item.actualProduced || 0,
              color: item.color || '-',
              startDate: item.startDate || SIMULATED_NOW.toISOString(),
              endDate: item.endDate || SIMULATED_NOW.toISOString(),
@@ -1102,11 +1201,11 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
               if (aistudio && aistudio.openSelectKey) {
                 await aistudio.openSelectKey();
               } else {
-                alert('ไม่สามารถเปิดหน้าต่างเปลี่ยน API Key ได้ในสภาพแวดล้อมนี้');
+                handleSetApiKey();
               }
             }} 
             className="text-xs text-slate-400 hover:text-white underline flex items-center gap-1" 
-            title="เปลี่ยน API Key (กรณีโควต้าฟรีหมด)"
+            title="เปลี่ยน API Key (กรณีโควต้าฟรีหมด หรือต้องการใช้ Key ของตัวเอง)"
           >
             <Key size={12} /> เปลี่ยน API Key
           </button>
@@ -1160,16 +1259,14 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                   <div className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100 mb-3 font-mono overflow-x-auto max-h-32">
                     {JSON.stringify(msg.actionProposal.data, null, 2)}
                   </div>
-                  {idx === messages.length - 1 && (
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => executeAction(msg.actionProposal, idx)}
-                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1"
-                      >
-                        <CheckCircle size={14} /> ยืนยัน (Approve)
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => executeAction(msg.actionProposal, idx)}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1"
+                    >
+                      <CheckCircle size={14} /> ยืนยัน (Approve)
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1190,16 +1287,25 @@ export const SmartAssistant: React.FC<SmartAssistantProps> = ({
                       </div>
                     ))}
                   </div>
-                  {idx === messages.length - 1 && (
-                    <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 mt-2">
+                    {msg.pendingFunctionCalls.map((call, callIdx) => (
+                      <button 
+                        key={callIdx}
+                        onClick={() => executePendingFunctionCalls(msg.pendingFunctionCalls!, idx, callIdx)}
+                        className="w-full bg-white hover:bg-amber-50 text-amber-700 border border-amber-300 text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        <CheckCircle size={14} /> ยืนยันรายการที่ {callIdx + 1} ({call.name})
+                      </button>
+                    ))}
+                    {msg.pendingFunctionCalls.length > 1 && (
                       <button 
                         onClick={() => executePendingFunctionCalls(msg.pendingFunctionCalls!, idx)}
-                        className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 shadow-sm"
+                        className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-1 shadow-sm mt-1"
                       >
-                        <CheckCircle size={14} /> ยืนยันดำเนินการทั้งหมด
+                        <CheckCircle size={14} /> ยืนยันดำเนินการทั้งหมด ({msg.pendingFunctionCalls.length} รายการ)
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
 

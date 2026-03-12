@@ -25,11 +25,15 @@ export const OEEDashboard: React.FC<OEEDashboardProps> = ({ jobs, downtimeLogs, 
         machineStats[job.machineId] = { plannedTimeMin: 0, downtimeMin: 0, targetQty: 0, actualQty: 0 };
       }
       
-      const start = new Date(job.startDate).getTime();
-      const end = new Date(job.endDate).getTime();
-      const durationMin = (end - start) / (1000 * 60);
+      if (job.startDate && job.endDate) {
+        const start = new Date(job.startDate).getTime();
+        const end = new Date(job.endDate).getTime();
+        if (!isNaN(start) && !isNaN(end)) {
+          const durationMin = (end - start) / (1000 * 60);
+          machineStats[job.machineId].plannedTimeMin += durationMin;
+        }
+      }
       
-      machineStats[job.machineId].plannedTimeMin += durationMin;
       machineStats[job.machineId].targetQty += job.totalProduction;
       machineStats[job.machineId].actualQty += (job.actualProduction || 0);
     });

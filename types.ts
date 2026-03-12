@@ -226,6 +226,13 @@ export interface CustomKnowledge {
   content: string;
   updatedAt: string;
   createdBy?: string;
+  category?: string;
+  tags?: string[];
+  linkedData?: {
+    type: 'Machine' | 'Product' | 'Inventory' | 'BOM';
+    id: string;
+    name: string;
+  }[];
 }
 // ----------------------------------
 
