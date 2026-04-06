@@ -39,7 +39,7 @@ export const DailyReportGenerator: React.FC<DailyReportGeneratorProps> = ({ jobs
       const ai = new GoogleGenAI({ apiKey });
       
       const activeJobs = jobs.filter(j => j.status === 'Running' || j.status === 'Delayed');
-      const capacityContext = activeJobs.map(j => `- เครื่อง ${j.machineId}: สินค้า ${j.productItem} (โมลด์ ${j.moldCode}) มีเป้าหมายการผลิต (Capacity/กะ) = ${j.capacityPerShift.toLocaleString()} ชิ้น`).join('\n');
+      const capacityContext = activeJobs.map(j => `- เครื่อง ${j.machineId}: สินค้า ${j.productItem} (โมลด์ ${j.moldCode}) มีเป้าหมายการผลิต (Capacity/กะ) = ${(j.capacityPerShift || 0).toLocaleString()} ชิ้น`).join('\n');
 
       const prompt = `
 คุณคือผู้ช่วยผู้จัดการโรงงานผลิต หน้าที่ของคุณคือการนำข้อความดิบที่ได้จากการแชทรายงานปัญหาและการผลิตในแต่ละวัน มาเรียบเรียงใหม่ให้เป็น "รายงานสรุปการผลิตประจำวัน" ที่อ่านง่าย เป็นมืออาชีพ และเหมาะสำหรับส่งให้ผู้บริหารหรือหัวหน้างานอ่านผ่าน LINE

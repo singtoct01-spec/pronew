@@ -222,8 +222,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const filteredInventory = inventory.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.code.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (item.name || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+    (item.code || '').toLowerCase().includes((searchTerm || '').toLowerCase());
     
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
     
@@ -231,7 +231,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   });
 
   const filteredBoms = boms.filter(bom => 
-    bom.productItem.toLowerCase().includes(bomSearchTerm.toLowerCase())
+    (bom.productItem || '').toLowerCase().includes((bomSearchTerm || '').toLowerCase())
   );
 
   const lowStockCount = inventory.filter(item => item.currentStock <= item.minStock).length;

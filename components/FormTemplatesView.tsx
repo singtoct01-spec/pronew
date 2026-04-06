@@ -61,7 +61,7 @@ export const FormTemplatesView: React.FC<FormTemplatesViewProps> = ({ forms, onV
   };
 
   const filteredForms = forms.filter(f => 
-    f.title.toLowerCase().includes(searchTerm.toLowerCase())
+    (f.title || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
   return (

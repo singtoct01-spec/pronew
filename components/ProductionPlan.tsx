@@ -163,7 +163,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
   const getColorBadgeStyle = (colorName: string) => {
     if (!colorName || colorName === '-' || colorName.trim() === '') return null;
     
-    const name = colorName.toLowerCase();
+    const name = (colorName || '').toLowerCase();
     let bg = 'bg-slate-100';
     let text = 'text-slate-700';
     let border = 'border-slate-200';
@@ -229,7 +229,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
   const bomMap = React.useMemo(() => {
     const map = new Map<string, ProductBOM>();
     boms.forEach(bom => {
-      map.set(bom.productItem.toLowerCase(), bom);
+      map.set((bom.productItem || '').toLowerCase(), bom);
     });
     return map;
   }, [boms]);
@@ -248,12 +248,12 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
     }
 
     // 2. If no materials, try to find BOM
-    const jobProductLower = job.productItem.toLowerCase();
+    const jobProductLower = (job.productItem || '').toLowerCase();
     let bom = bomMap.get(jobProductLower);
     
     // Fallback to partial match if exact match not found
     if (!bom) {
-      bom = boms.find(b => b.productItem.toLowerCase().includes(jobProductLower) || jobProductLower.includes(b.productItem.toLowerCase()));
+      bom = boms.find(b => (b.productItem || '').toLowerCase().includes(jobProductLower) || jobProductLower.includes((b.productItem || '').toLowerCase()));
     }
     
     if (bom) {
@@ -504,7 +504,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                                                                 }}
                                                                 title="คลิกเพื่ออัปเดตยอดผลิต"
                                                               >
-                                                                  {actualQty.toLocaleString()} <span className="text-slate-400 font-normal">/ {totalQty.toLocaleString()}</span>
+                                                                  {(actualQty || 0).toLocaleString()} <span className="text-slate-400 font-normal">/ {(totalQty || 0).toLocaleString()}</span>
                                                                   <Edit2 size={10} className="text-slate-300" />
                                                               </span>
                                                             )}
@@ -514,8 +514,8 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                                                         </div>
                                                         {/* Remaining Label */}
                                                         <div className="flex justify-end text-[10px] mt-0.5 md:hidden">
-                                                            <span className={`font-mono font-bold ${remainingQty > 0 ? 'text-slate-500' : 'text-emerald-600'}`}>
-                                                                {remainingQty > 0 ? `เหลือ: ${remainingQty.toLocaleString()}` : `เกินเป้า: +${Math.abs(remainingQty).toLocaleString()}`}
+                                                            <span className={`font-mono font-bold ${(remainingQty || 0) > 0 ? 'text-slate-500' : 'text-emerald-600'}`}>
+                                                                {(remainingQty || 0) > 0 ? `เหลือ: ${(remainingQty || 0).toLocaleString()}` : `เกินเป้า: +${Math.abs(remainingQty || 0).toLocaleString()}`}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -524,7 +524,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                                                     <div className="hidden sm:block">
                                                         <div className="flex justify-between text-[10px] mb-0.5 text-slate-500">
                                                             <span className="flex items-center gap-1"><Clock size={10}/> เป้าหมาย (ตามเวลา)</span>
-                                                            <span className="font-mono">{expectedQty.toLocaleString()} ({timePercent}%)</span>
+                                                            <span className="font-mono">{(expectedQty || 0).toLocaleString()} ({timePercent}%)</span>
                                                         </div>
                                                         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200 relative">
                                                             <div className="h-full bg-slate-400 opacity-60 rounded-full transition-all duration-500" style={{ width: `${timePercent}%` }}></div>
@@ -541,10 +541,10 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                                                 </div>
                                                 <div>
                                                     <p className="text-[10px] text-slate-400 uppercase">คงเหลือ (Remaining)</p>
-                                                    <p className={`text-md font-mono font-bold ${remainingQty <= 0 ? 'text-emerald-600' : 'text-slate-600'}`}>
-                                                        {remainingQty <= 0 ? '+' : ''}{remainingQty <= 0 ? Math.abs(remainingQty).toLocaleString() : remainingQty.toLocaleString()}
+                                                    <p className={`text-md font-mono font-bold ${(remainingQty || 0) <= 0 ? 'text-emerald-600' : 'text-slate-600'}`}>
+                                                        {(remainingQty || 0) <= 0 ? '+' : ''}{(remainingQty || 0) <= 0 ? Math.abs(remainingQty || 0).toLocaleString() : (remainingQty || 0).toLocaleString()}
                                                     </p>
-                                                    {remainingQty <= 0 && <p className="text-[9px] text-emerald-600 font-bold">Over Target</p>}
+                                                    {(remainingQty || 0) <= 0 && <p className="text-[9px] text-emerald-600 font-bold">Over Target</p>}
                                                 </div>
                                             </div>
 

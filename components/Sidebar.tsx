@@ -2,7 +2,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Table, Calendar, Activity, ClipboardList, PackageSearch, History, Clock, Database, TrendingUp, FileText, AlertOctagon, Users, BrainCircuit, CheckCircle2, Cpu } from 'lucide-react';
+import { LayoutDashboard, Table, Calendar, Activity, ClipboardList, PackageSearch, History, Clock, Database, TrendingUp, FileText, AlertOctagon, Users, BrainCircuit, CheckCircle2, Cpu, BarChart3 } from 'lucide-react';
 import { AppUser, DatePeriod } from '../types';
 import { getDateRangeForPeriod, formatDateOnly } from '../utils/dateUtils';
 
@@ -56,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, cur
     {
       title: 'คลังสินค้า & ข้อมูลหลัก',
       items: [
+        { id: 'inventory-dashboard', label: 'Dashboard สินค้าคงคลัง FG', icon: <BarChart3 size={20} /> },
         { id: 'inventory', label: 'สินค้าคงเหลือ (FG) & วัตถุดิบ', icon: <PackageSearch size={20} /> },
         { id: 'master-data', label: 'ฐานข้อมูลหลัก (Master)', icon: <Database size={20} /> },
         { id: 'excel-sync', label: 'นำเข้า/ส่งออก (Excel)', icon: <FileText size={20} /> },
@@ -67,6 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, cur
         { id: 'documents', label: 'ศูนย์เอกสาร', icon: <FileText size={20} /> },
         { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
         { id: 'daily-report', label: 'รายงานประจำวัน (AI)', icon: <FileText size={20} /> },
+        { id: 'meeting-planner', label: 'แผนการประชุม (CAR/PAR)', icon: <Users size={20} /> },
       ]
     },
     {

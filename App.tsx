@@ -32,6 +32,8 @@ import { DailyReportGenerator } from './components/DailyReportGenerator';
 import { ShiftProductionView } from './components/ShiftProductionView';
 import { GoogleSheetsImportModal } from './components/GoogleSheetsImportModal';
 import { PlanVsActualDashboard } from './components/PlanVsActualDashboard';
+import { InventoryDashboard } from './components/InventoryDashboard';
+import { MeetingPlannerView } from './components/MeetingPlannerView';
 import { Login } from './components/Login';
 import { UserManagement } from './components/UserManagement';
 import { ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_CAPABILITIES, AuditLog, AiMessage, FormTemplate, DowntimeLog, CustomKnowledge, InventoryItem, ProductBOM, AppUser, ShiftProductionLog, DailyReportLog, Status, DatePeriod } from './types';
@@ -41,7 +43,7 @@ import { AiKnowledgeBase } from './components/AiKnowledgeBase';
 import { DocumentCenter } from './components/DocumentCenter';
 import { formatDateTime, formatTimeOnly, getDateRangeForPeriod } from './utils/dateUtils';
 
-export type ViewState = 'dashboard' | 'plan' | 'completed-plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'master-data' | 'excel-sync' | 'ai-knowledge' | 'documents' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users' | 'downtime-logs' | 'daily-downtime' | 'daily-report';
+export type ViewState = 'dashboard' | 'plan' | 'completed-plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'inventory-dashboard' | 'master-data' | 'excel-sync' | 'ai-knowledge' | 'documents' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users' | 'downtime-logs' | 'daily-downtime' | 'daily-report' | 'meeting-planner';
 
 const App: React.FC = () => {
   const location = useLocation();
@@ -86,6 +88,7 @@ const App: React.FC = () => {
     {
       title: 'คลังสินค้า & ข้อมูลหลัก',
       items: [
+        { id: 'inventory-dashboard', label: 'Dashboard สินค้าคงคลัง FG', icon: <BarChart3 size={20} /> },
         { id: 'inventory', label: 'สินค้าคงเหลือ (FG) & วัตถุดิบ', icon: <Package size={20} /> },
         { id: 'master-data', label: 'ฐานข้อมูลหลัก (Master)', icon: <Settings size={20} /> },
         { id: 'excel-sync', label: 'นำเข้า/ส่งออก (Excel)', icon: <FileText size={20} /> },
@@ -97,6 +100,7 @@ const App: React.FC = () => {
         { id: 'documents', label: 'ศูนย์เอกสาร', icon: <FileText size={20} /> },
         { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
         { id: 'daily-report', label: 'รายงานประจำวัน (AI)', icon: <FileText size={20} /> },
+        { id: 'meeting-planner', label: 'แผนการประชุม (CAR/PAR)', icon: <Users size={20} /> },
       ]
     },
     {
@@ -499,7 +503,7 @@ const App: React.FC = () => {
   const handleAddCustomKnowledge = async (topic: string, content: string, linkedData?: { type: string, id: string, name: string }[]) => {
     try {
       // Check if topic already exists
-      const existing = customKnowledge.find(k => k.topic.toLowerCase() === topic.toLowerCase());
+      const existing = customKnowledge.find(k => (k.topic || '').toLowerCase() === (topic || '').toLowerCase());
       
       if (existing) {
         // Append content to existing topic
@@ -1008,19 +1012,54 @@ const App: React.FC = () => {
 
       const jobsToUpdate: ProductionJob[] = [];
       const jobsToAdd: ProductionJob[] = [];
+      const logsToAdd: any[] = [];
 
       importedJobs.forEach(job => {
         if (job.jobOrder && existingJobMap.has(job.jobOrder)) {
           const existingJob = existingJobMap.get(job.jobOrder)!;
+          
+          const newActual = Math.max(existingJob.actualProduction || 0, job.actualProduction || 0);
+          const newTotal = Math.max(existingJob.totalProduction || 0, job.totalProduction || 0);
+          const diffActual = newActual - (existingJob.actualProduction || 0);
+          
+          let newStatus = existingJob.status;
+          if (newActual >= newTotal && newTotal > 0) {
+            newStatus = 'Overproduced';
+          } else if (newStatus === 'Overproduced' && newActual < newTotal) {
+            newStatus = 'Running'; // Revert if target increased
+          }
+
           // Update existing job by taking the maximum production numbers
           const updatedJob = {
             ...existingJob,
-            totalProduction: Math.max(existingJob.totalProduction || 0, job.totalProduction || 0),
-            actualProduction: Math.max(existingJob.actualProduction || 0, job.actualProduction || 0),
+            totalProduction: newTotal,
+            actualProduction: newActual,
+            note: job.note !== undefined ? job.note : existingJob.note,
+            startDate: job.startDate || existingJob.startDate,
+            endDate: job.endDate || existingJob.endDate,
+            status: newStatus,
           };
           jobsToUpdate.push(updatedJob);
           // Update the map so subsequent duplicates in the same import are handled correctly
           existingJobMap.set(job.jobOrder, updatedJob);
+
+          // If actual production increased, create a shift production log
+          if (diffActual > 0) {
+            const logId = `SHIFT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            logsToAdd.push({
+              id: logId,
+              date: new Date().toISOString().split('T')[0],
+              shift: new Date().getHours() >= 8 && new Date().getHours() < 20 ? 'Day' : 'Night',
+              machineId: updatedJob.machineId,
+              jobOrder: updatedJob.jobOrder,
+              productItem: updatedJob.productItem,
+              goodQuantity: diffActual,
+              defectQuantity: 0,
+              operatorName: 'System Import',
+              notes: 'อัปเดตยอดอัตโนมัติจากการนำเข้าข้อมูล (Copy/Paste)',
+              timestamp: new Date().toISOString()
+            });
+          }
         } else {
           // Add new job
           const newJob = {
@@ -1033,6 +1072,42 @@ const App: React.FC = () => {
           } as ProductionJob;
           jobsToAdd.push(newJob);
           if (job.jobOrder) existingJobMap.set(job.jobOrder, newJob);
+        }
+      });
+
+      // Handle auto-start next job
+      // Group jobs by machine
+      const machineJobs = new Map<string, ProductionJob[]>();
+      Array.from(existingJobMap.values()).forEach(job => {
+        if (!machineJobs.has(job.machineId)) {
+          machineJobs.set(job.machineId, []);
+        }
+        machineJobs.get(job.machineId)!.push(job);
+      });
+
+      machineJobs.forEach((mJobs, machineId) => {
+        // Sort by start date
+        mJobs.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+        
+        let foundRunning = false;
+        for (let i = 0; i < mJobs.length; i++) {
+          const job = mJobs[i];
+          if (job.status === 'Running') {
+            foundRunning = true;
+          } else if (job.status === 'Planned' && !foundRunning) {
+            // Check if previous jobs are completed/overproduced
+            const prevJobsFinished = mJobs.slice(0, i).every(j => j.status === 'Completed' || j.status === 'Overproduced');
+            if (prevJobsFinished || i === 0) {
+              // Auto start this job
+              job.status = 'Running';
+              foundRunning = true;
+              
+              // Ensure it's in the update list if not already
+              if (!jobsToUpdate.find(j => j.id === job.id) && !jobsToAdd.find(j => j.id === job.id)) {
+                jobsToUpdate.push(job);
+              }
+            }
+          }
         }
       });
 
@@ -1050,6 +1125,14 @@ const App: React.FC = () => {
           batch.set(jobRef, sanitizedJob, { merge: true });
         }
         
+        // Add logs to batch
+        if (i === 0) { // Add logs in the first chunk to avoid exceeding batch limit if too many logs
+          for (const log of logsToAdd.slice(0, 50)) { // Limit logs per batch to be safe
+            const logRef = doc(db, 'shiftProductionLogs', log.id);
+            batch.set(logRef, log);
+          }
+        }
+        
         // Add log in the last chunk
         if (i + chunkSize >= allOps.length) {
           const logRef = collection(db, 'logs');
@@ -1064,6 +1147,19 @@ const App: React.FC = () => {
         }
         
         await batch.commit();
+      }
+      
+      // If there are more logs, write them in separate batches
+      if (logsToAdd.length > 50) {
+        for (let i = 50; i < logsToAdd.length; i += 400) {
+          const logChunk = logsToAdd.slice(i, i + 400);
+          const logBatch = writeBatch(db);
+          for (const log of logChunk) {
+            const logRef = doc(db, 'shiftProductionLogs', log.id);
+            logBatch.set(logRef, log);
+          }
+          await logBatch.commit();
+        }
       }
       
       alert(`นำเข้า/อัปเดตข้อมูลสำเร็จ ${allOps.length} รายการ`);
@@ -1507,6 +1603,7 @@ const App: React.FC = () => {
           <Route path="/schedule" element={<TimelineView jobs={filteredJobs} onUpdateJob={handleSaveJob} />} />
           <Route path="/list" element={<JobTable jobs={filteredJobs} inventory={inventory} boms={boms} onEditJob={handleEditJob} onPrintHandover={handlePrintHandover} onPrintTag={handlePrintTag} onViewOrder={handleViewOrder} />} />
           <Route path="/machines" element={<MachineGrid jobs={filteredJobs} onEditJob={handleEditJob} />} />
+          <Route path="/inventory-dashboard" element={<InventoryDashboard />} />
           <Route path="/inventory" element={
             <InventoryView 
               inventory={inventory} 
@@ -1535,6 +1632,7 @@ const App: React.FC = () => {
           <Route path="/history" element={<HistoryLog logs={logs} aiMessages={aiMessages} onRevert={handleRevert} jobs={jobs} />} />
           <Route path="/downtime-logs" element={<DowntimeLogsView logs={filteredDowntimeLogs} onDeleteLog={handleDeleteDowntimeLog} />} />
           <Route path="/daily-downtime" element={<DailyDowntimeReport logs={filteredDowntimeLogs} onDeleteLog={handleDeleteDowntimeLog} />} />
+          <Route path="/meeting-planner" element={<MeetingPlannerView jobs={filteredJobs} downtimeLogs={filteredDowntimeLogs} />} />
           <Route path="/daily-report" element={<DailyReportGenerator jobs={filteredJobs} dailyReports={filteredDailyReports} onSaveReport={handleSaveDailyReport} onDeleteReport={handleDeleteDailyReport} />} />
           <Route path="/shift-production" element={<ShiftProductionView logs={filteredShiftLogs} jobs={filteredJobs} onSaveLog={handleSaveShiftProductionLog} />} />
           <Route path="/form-templates" element={

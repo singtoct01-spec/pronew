@@ -62,7 +62,7 @@ export function SearchableSelect({
   }, [selectedOption, allowCustom, searchTerm, onChange]);
 
   const filteredOptions = options.filter(opt => 
-    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+    (opt.label || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

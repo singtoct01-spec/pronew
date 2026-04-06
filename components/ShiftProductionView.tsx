@@ -31,8 +31,8 @@ export const ShiftProductionView: React.FC<ShiftProductionViewProps> = ({ logs, 
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
-      const matchesSearch = log.machineId.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            log.productItem.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = (log.machineId || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                            (log.productItem || '').toLowerCase().includes((searchTerm || '').toLowerCase());
       const matchesShift = filterShift === 'All' || log.shift === filterShift;
       const matchesDate = !filterDate || log.date === filterDate;
       return matchesSearch && matchesShift && matchesDate;
@@ -212,10 +212,10 @@ export const ShiftProductionView: React.FC<ShiftProductionViewProps> = ({ logs, 
                       <div className="font-medium text-gray-900">{log.productItem}</div>
                       <div className="text-sm text-gray-500">{log.jobOrder || '-'}</div>
                     </td>
-                    <td className="p-4 text-right text-gray-600">{log.target.toLocaleString()}</td>
-                    <td className="p-4 text-right font-medium text-gray-900">{log.actual.toLocaleString()}</td>
-                    <td className={`p-4 text-right font-medium ${log.variance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {log.variance > 0 ? '+' : ''}{log.variance.toLocaleString()}
+                    <td className="p-4 text-right text-gray-600">{(log.target || 0).toLocaleString()}</td>
+                    <td className="p-4 text-right font-medium text-gray-900">{(log.actual || 0).toLocaleString()}</td>
+                    <td className={`p-4 text-right font-medium ${(log.variance || 0) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {(log.variance || 0) > 0 ? '+' : ''}{(log.variance || 0).toLocaleString()}
                     </td>
                     <td className="p-4">
                       {log.isBelowTarget ? (

@@ -33,7 +33,7 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, inventory, boms, onEdi
   const bomMap = React.useMemo(() => {
     const map = new Map<string, ProductBOM>();
     boms.forEach(bom => {
-      map.set(bom.productItem.toLowerCase(), bom);
+      map.set((bom.productItem || '').toLowerCase(), bom);
     });
     return map;
   }, [boms]);
@@ -52,12 +52,12 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, inventory, boms, onEdi
     }
 
     // 2. If no materials, try to find BOM
-    const jobProductLower = job.productItem.toLowerCase();
+    const jobProductLower = (job.productItem || '').toLowerCase();
     let bom = bomMap.get(jobProductLower);
     
     // Fallback to partial match if exact match not found
     if (!bom) {
-      bom = boms.find(b => b.productItem.toLowerCase().includes(jobProductLower) || jobProductLower.includes(b.productItem.toLowerCase()));
+      bom = boms.find(b => (b.productItem || '').toLowerCase().includes(jobProductLower) || jobProductLower.includes((b.productItem || '').toLowerCase()));
     }
     
     if (bom) {
@@ -78,9 +78,9 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, inventory, boms, onEdi
 
   const filteredJobs = jobs.filter(job => {
     const matchesSearch = 
-      job.machineId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.jobOrder.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.productItem.toLowerCase().includes(searchTerm.toLowerCase());
+      (job.machineId || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+      (job.jobOrder || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+      (job.productItem || '').toLowerCase().includes((searchTerm || '').toLowerCase());
     
     const matchesFilter = filterStatus === 'All' || job.status === filterStatus;
 
@@ -245,10 +245,10 @@ export const JobTable: React.FC<JobTableProps> = ({ jobs, inventory, boms, onEdi
                   {(job.totalProduction || 0).toLocaleString()}
                 </td>
                 <td className="px-4 py-4 text-right font-mono text-slate-800">
-                  {job.actualProduction ? job.actualProduction.toLocaleString() : '-'}
+                  {job.actualProduction ? (job.actualProduction || 0).toLocaleString() : '-'}
                 </td>
                 <td className={`px-4 py-4 text-right font-mono bg-slate-50 border-x border-slate-100 font-bold ${isOver ? 'text-emerald-600' : 'text-slate-800'}`}>
-                  {isOver ? `+${Math.abs(remaining).toLocaleString()}` : remaining.toLocaleString()}
+                  {isOver ? `+${Math.abs(remaining || 0).toLocaleString()}` : (remaining || 0).toLocaleString()}
                 </td>
                 <td className="px-4 py-4 text-slate-600 whitespace-nowrap text-xs">{formatDate(job.startDate)}</td>
                 <td className="px-4 py-4 text-slate-600 whitespace-nowrap text-xs">{formatDate(job.endDate)}</td>

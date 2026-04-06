@@ -18,8 +18,8 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
       const matchesSearch = 
-        job.jobOrder.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        job.productItem.toLowerCase().includes(searchTerm.toLowerCase());
+        (job.jobOrder || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+        (job.productItem || '').toLowerCase().includes((searchTerm || '').toLowerCase());
       
       const matchesStatus = statusFilter === 'All' || job.status === statusFilter;
       

@@ -79,11 +79,11 @@ export const ProductionAnalysis: React.FC<ProductionAnalysisProps> = ({ jobs }) 
                     <td className="px-6 py-4 text-right font-mono">
                       {diff > 0 ? (
                         <span className="text-emerald-600 flex items-center justify-end gap-1">
-                          <TrendingUp size={14} /> +{diff.toLocaleString()}
+                          <TrendingUp size={14} /> +{(diff || 0).toLocaleString()}
                         </span>
                       ) : diff < 0 ? (
                         <span className="text-red-600 flex items-center justify-end gap-1">
-                          <TrendingDown size={14} /> {diff.toLocaleString()}
+                          <TrendingDown size={14} /> {(diff || 0).toLocaleString()}
                         </span>
                       ) : (
                         <span className="text-slate-400 flex items-center justify-end gap-1">

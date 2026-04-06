@@ -113,17 +113,17 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
     const searchTerms = [
         `${product} (${color})`.trim().toLowerCase(),
         `${product} ${color}`.trim().toLowerCase(),
-        product.toLowerCase()
+        (product || '').toLowerCase()
     ];
 
     let bom: ProductBOM | undefined;
     for (const term of searchTerms) {
-        bom = boms.find(b => b.productItem.toLowerCase() === term); 
+        bom = boms.find(b => (b.productItem || '').toLowerCase() === term); 
         if (bom) break;
     }
     
     if (!bom) {
-         bom = boms.find(b => b.productItem.toLowerCase().includes(product.toLowerCase()));
+         bom = boms.find(b => (b.productItem || '').toLowerCase().includes((product || '').toLowerCase()));
     }
 
     if (!bom) {
@@ -158,7 +158,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
 
     const sortedSpecs = [...productSpecs].sort((a, b) => b.code.length - a.code.length);
     const matchedSpec = sortedSpecs.find(spec => 
-        formData.productItem?.toLowerCase().includes(spec.code.toLowerCase())
+        (formData.productItem || '').toLowerCase().includes((spec.code || '').toLowerCase())
     );
 
     if (matchedSpec) {
@@ -343,8 +343,8 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
                 />
                 {showProductDropdown && (
                   <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {boms.filter(b => b.productItem.toLowerCase().includes(productSearch.toLowerCase())).length > 0 ? (
-                      boms.filter(b => b.productItem.toLowerCase().includes(productSearch.toLowerCase())).map((bom, idx) => (
+                    {boms.filter(b => (b.productItem || '').toLowerCase().includes((productSearch || '').toLowerCase())).length > 0 ? (
+                      boms.filter(b => (b.productItem || '').toLowerCase().includes((productSearch || '').toLowerCase())).map((bom, idx) => (
                         <div 
                           key={idx}
                           className="px-3 py-2 hover:bg-brand-50 cursor-pointer text-sm border-b border-slate-100 last:border-0"

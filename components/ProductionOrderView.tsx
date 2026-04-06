@@ -17,9 +17,9 @@ export const ProductionOrderView: React.FC<ProductionOrderViewProps> = ({ job, b
   };
 
   // Helper to determine form type
-  const isJar = job.productType?.toLowerCase().includes('jar') || job.productItem.includes('โหล') || job.productType?.includes('โหล');
-  const isCap = job.productType?.toLowerCase().includes('cap') || job.productItem.includes('ฝา') || job.productType?.includes('ฝา');
-  const isPreform = job.productType?.toLowerCase().includes('preform') || job.productItem.toLowerCase().includes('preform');
+  const isJar = (job.productType || '').toLowerCase().includes('jar') || (job.productItem || '').includes('โหล') || (job.productType || '').includes('โหล');
+  const isCap = (job.productType || '').toLowerCase().includes('cap') || (job.productItem || '').includes('ฝา') || (job.productType || '').includes('ฝา');
+  const isPreform = (job.productType || '').toLowerCase().includes('preform') || (job.productItem || '').toLowerCase().includes('preform');
 
   // Helper to find BOM for raw material calculation (Mock logic for display)
   const bom = boms.find(b => job.productItem.includes(b.productItem));

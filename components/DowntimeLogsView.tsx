@@ -14,9 +14,9 @@ export const DowntimeLogsView: React.FC<DowntimeLogsViewProps> = ({ logs, onDele
   const [filterCategory, setFilterCategory] = useState<string>('All');
 
   const filteredLogs = logs.filter(log => {
-    const matchesSearch = log.machineId.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          log.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (log.reporter && log.reporter.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = (log.machineId || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                          (log.reason || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (log.reporter && (log.reporter || '').toLowerCase().includes((searchTerm || '').toLowerCase()));
     const matchesCategory = filterCategory === 'All' || log.category === filterCategory;
     return matchesSearch && matchesCategory;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -53,7 +53,7 @@ export const DowntimeLogsView: React.FC<DowntimeLogsViewProps> = ({ logs, onDele
           </div>
           <div>
             <p className="text-sm text-slate-500 font-medium">เวลาสูญเสียรวม (นาที)</p>
-            <p className="text-2xl font-bold text-slate-800">{totalDowntime.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-slate-800">{(totalDowntime || 0).toLocaleString()}</p>
           </div>
         </div>
         <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">

@@ -80,7 +80,7 @@ export const MoveJobModal: React.FC<MoveJobModalProps> = ({ job, jobs, machines,
             <div className="flex gap-4 mt-2 text-sm">
               <span className="text-slate-600">เครื่อง: <span className="font-bold">{job.machineId}</span></span>
               <span className="text-slate-600">แม่พิมพ์: <span className="font-bold">{job.moldCode}</span></span>
-              <span className="text-slate-600">เป้าหมาย: <span className="font-bold">{job.totalProduction.toLocaleString()}</span></span>
+              <span className="text-slate-600">เป้าหมาย: <span className="font-bold">{(job.totalProduction || 0).toLocaleString()}</span></span>
             </div>
           </div>
 
@@ -148,12 +148,12 @@ export const MoveJobModal: React.FC<MoveJobModalProps> = ({ job, jobs, machines,
                   <span className="text-blue-800 font-medium whitespace-nowrap">ชิ้น</span>
                 </div>
                 <div className="mt-2 text-sm text-blue-700 flex justify-between">
-                  <span>เครื่องเดิมจะเหลือเป้าหมาย: <strong>{(job.totalProduction - splitQty).toLocaleString()}</strong></span>
+                  <span>เครื่องเดิมจะเหลือเป้าหมาย: <strong>{((job.totalProduction || 0) - splitQty).toLocaleString()}</strong></span>
                   <span>เครื่องใหม่จะได้เป้าหมาย: <strong>{splitQty.toLocaleString()}</strong></span>
                 </div>
                 {job.actualProduction > 0 && (
                   <div className="mt-1 text-xs text-blue-600">
-                    * งานนี้ผลิตไปแล้ว {job.actualProduction.toLocaleString()} ชิ้น (ยอดคงเหลือที่แบ่งได้: {remainingQty.toLocaleString()} ชิ้น)
+                    * งานนี้ผลิตไปแล้ว {(job.actualProduction || 0).toLocaleString()} ชิ้น (ยอดคงเหลือที่แบ่งได้: {remainingQty.toLocaleString()} ชิ้น)
                   </div>
                 )}
               </div>

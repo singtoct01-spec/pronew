@@ -133,17 +133,17 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
   };
 
   const filteredProducts = productSpecs.filter(p => 
-    p.code.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.code || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+    (p.name || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
   const filteredMachines = machineCapabilities.filter(m =>
-    m.machineGroup.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.moldName.toLowerCase().includes(searchTerm.toLowerCase())
+    (m.machineGroup || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+    (m.moldName || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
   const filteredBoms = boms.filter(b => 
-    b.productItem.toLowerCase().includes(searchTerm.toLowerCase())
+    (b.productItem || '').toLowerCase().includes((searchTerm || '').toLowerCase())
   );
 
   return (

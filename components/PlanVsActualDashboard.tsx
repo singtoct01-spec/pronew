@@ -150,11 +150,11 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
                 </div>
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">เป้าหมายรายชั่วโมง</p>
-                  <p className="text-2xl font-mono font-bold text-indigo-600">{hourlyTarget.toLocaleString()}</p>
+                  <p className="text-2xl font-mono font-bold text-indigo-600">{(hourlyTarget || 0).toLocaleString()}</p>
                 </div>
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">เป้าหมายสะสม (ถึงปัจจุบัน)</p>
-                  <p className="text-2xl font-mono font-bold text-slate-800">{expectedProduction.toLocaleString()}</p>
+                  <p className="text-2xl font-mono font-bold text-slate-800">{(expectedProduction || 0).toLocaleString()}</p>
                 </div>
                 <div className={`bg-white rounded-xl shadow-sm border p-4 ${isBehind ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
                   <p className={`text-xs uppercase font-bold mb-1 ${isBehind ? 'text-rose-600' : 'text-emerald-600'}`}>
@@ -163,7 +163,7 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
                   <div className="flex items-center gap-2">
                     {isBehind ? <AlertTriangle size={20} className="text-rose-600" /> : <CheckCircle2 size={20} className="text-emerald-600" />}
                     <p className={`text-2xl font-mono font-bold ${isBehind ? 'text-rose-700' : 'text-emerald-700'}`}>
-                      {diff > 0 ? '+' : ''}{diff.toLocaleString()}
+                      {(diff || 0) > 0 ? '+' : ''}{(diff || 0).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -178,7 +178,7 @@ export const PlanVsActualDashboard: React.FC<PlanVsActualDashboardProps> = ({ jo
                   </div>
                   <div className="text-right">
                     <p className="text-3xl font-mono font-bold text-slate-800">
-                      {currentActual.toLocaleString()} <span className="text-lg text-slate-400">/ {(selectedJob.totalProduction || 0).toLocaleString()}</span>
+                      {(currentActual || 0).toLocaleString()} <span className="text-lg text-slate-400">/ {(selectedJob.totalProduction || 0).toLocaleString()}</span>
                     </p>
                   </div>
                 </div>

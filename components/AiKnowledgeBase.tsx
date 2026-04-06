@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CustomKnowledge, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability } from '../types';
 import { Search, BookOpen, Plus, Trash2, Edit2, BrainCircuit, Tag, Folder, Link as LinkIcon, X, Upload, FileText, File as FileIcon, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase';
 import { extractTextFromFile } from '../utils/fileExtractor';
 
@@ -43,9 +43,9 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
   const [linkType, setLinkType] = useState<'Machine' | 'Product' | 'Inventory' | 'BOM'>('Machine');
 
   const filteredKnowledge = customKnowledge.filter(k => {
-    const matchesSearch = k.topic.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          k.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (k.tags && k.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())));
+    const matchesSearch = (k.topic || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (k.content || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                          (k.tags && k.tags.some(t => (t || '').toLowerCase().includes((searchTerm || '').toLowerCase())));
     const matchesCategory = filterCategory === 'ทั้งหมด' || k.category === filterCategory;
     return matchesSearch && matchesCategory;
   });
@@ -55,36 +55,123 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
     
     setIsUploading(true);
     try {
-      const file = e.target.files[0];
+      const files = Array.from(e.target.files);
+      const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
       
-      // 1. Upload to Firebase Storage
-      const storageRef = ref(storage, `knowledge_files/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const results: { file: File, url: string, extractedText: string }[] = [];
       
-      // 2. Extract text from file
-      const extractedText = await extractTextFromFile(file);
-      
-      // 3. Append to content
-      if (extractedText && extractedText.trim() !== '' && !extractedText.startsWith('[File uploaded:')) {
-        setNewContent(prev => prev + (prev ? '\n\n' : '') + `--- เนื้อหาจากไฟล์ ${file.name} ---\n` + extractedText);
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index];
+        let url = '';
+        
+        if (file.size < 700000) {
+          const toBase64 = (f: File) => new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(f);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = error => reject(error);
+          });
+          url = await toBase64(file);
+        } else {
+          // Chunked
+          const chunkSize = 500000;
+          const totalChunks = Math.ceil(file.size / chunkSize);
+          const fileId = `KNOW-${Date.now()}-${index}`;
+          
+          for (let i = 0; i < totalChunks; i++) {
+            const chunk = file.slice(i * chunkSize, (i + 1) * chunkSize);
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.readAsDataURL(chunk);
+              reader.onload = () => {
+                const result = reader.result as string;
+                const base64Data = result.includes(',') ? result.split(',')[1] : result;
+                resolve(base64Data);
+              };
+              reader.onerror = reject;
+            });
+            
+            await setDoc(doc(db, 'document_chunks', `${fileId}_${i}`), {
+              docId: fileId,
+              chunkIndex: i,
+              data: base64
+            });
+            
+            // Add a small delay to prevent overwhelming Firestore write queue
+            await delay(150);
+          }
+          url = `firestore-chunked://${fileId}|${totalChunks}|${file.type}`;
+        }
+        
+        // 2. Extract text from file
+        const extractedText = await extractTextFromFile(file);
+        
+        results.push({ file, url, extractedText });
       }
+
+      let combinedContent = '';
+      const newFilesList: { name: string; url: string; type: string; size: number }[] = [];
+
+      for (const result of results) {
+        const { file, url, extractedText } = result;
+        if (extractedText && extractedText.trim() !== '' && !extractedText.startsWith('[File uploaded:')) {
+          combinedContent += (combinedContent ? '\n\n' : '') + `--- เนื้อหาจากไฟล์ ${file.name} ---\n` + extractedText;
+        }
+        newFilesList.push({
+          name: file.name,
+          url,
+          type: file.type || file.name.split('.').pop() || 'unknown',
+          size: file.size
+        });
+      }
+
+      setNewContent(prev => prev + (prev && combinedContent ? '\n\n' : '') + combinedContent);
+      setNewFiles(prev => [...prev, ...newFilesList]);
       
-      // 4. Add to files array
-      setNewFiles(prev => [...prev, {
-        name: file.name,
-        url,
-        type: file.type || file.name.split('.').pop() || 'unknown',
-        size: file.size
-      }]);
-      
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading file:", error);
-      alert("เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
+      if (error.message === "CORS_TIMEOUT") {
+        alert("การอัปโหลดใช้เวลานานผิดปกติ อาจเกิดจากไม่ได้ตั้งค่า CORS ใน Firebase Storage หรือไฟล์มีขนาดใหญ่เกินไป\n\nวิธีแก้: กรุณาติดต่อผู้ดูแลระบบเพื่อตั้งค่า CORS");
+      } else {
+        alert("เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
+      }
     } finally {
       setIsUploading(false);
       // Reset file input
       if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleDownloadFile = async (file: { name: string, url: string, type: string }) => {
+    if (file.url.startsWith('firestore-chunked://')) {
+      try {
+        const parts = file.url.replace('firestore-chunked://', '').split('|');
+        const docId = parts[0];
+        const totalChunks = parseInt(parts[1], 10);
+        const mimeType = parts[2] || 'application/octet-stream';
+        
+        let fullBase64 = '';
+        for (let i = 0; i < totalChunks; i++) {
+          const chunkDoc = await getDoc(doc(db, 'document_chunks', `${docId}_${i}`));
+          if (chunkDoc.exists()) {
+            fullBase64 += chunkDoc.data().data;
+          }
+        }
+        
+        const dataUrl = `data:${mimeType};base64,${fullBase64}`;
+        
+        const a = window.document.createElement('a');
+        a.href = dataUrl;
+        a.download = file.name;
+        window.document.body.appendChild(a);
+        a.click();
+        window.document.body.removeChild(a);
+      } catch (error) {
+        console.error("Error downloading chunked file:", error);
+        alert("เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์");
+      }
+    } else {
+      window.open(file.url, '_blank');
     }
   };
 
@@ -119,7 +206,7 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
     
     // Check if topic already exists (when adding new)
     if (!editingId) {
-      const existing = customKnowledge.find(k => k.topic.toLowerCase() === newTopic.toLowerCase());
+      const existing = customKnowledge.find(k => (k.topic || '').toLowerCase() === (newTopic || '').toLowerCase());
       if (existing) {
         // Append to existing
         onSaveKnowledge({
@@ -271,18 +358,16 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                       <span className="text-xs font-medium text-slate-500 mb-1">ไฟล์แนบ:</span>
                       <div className="flex flex-wrap gap-2">
                         {k.files.map((file, idx) => (
-                          <a 
+                          <button 
                             key={idx} 
-                            href={file.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
+                            onClick={() => handleDownloadFile(file)} 
                             className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1 rounded-md text-xs hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors"
                           >
                             {file.type.includes('image') ? <ImageIcon size={12} className="text-blue-500" /> : 
                              file.type.includes('pdf') ? <FileText size={12} className="text-red-500" /> : 
                              <FileIcon size={12} className="text-slate-500" />}
                             <span className="truncate max-w-[120px]">{file.name}</span>
-                          </a>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -381,9 +466,13 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                       {file.type.includes('image') ? <ImageIcon size={16} className="text-blue-500" /> : 
                        file.type.includes('pdf') ? <FileText size={16} className="text-red-500" /> : 
                        <FileIcon size={16} className="text-slate-500" />}
-                      <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline truncate max-w-[150px]">
+                      <button 
+                        type="button"
+                        onClick={() => handleDownloadFile(file)} 
+                        className="text-indigo-600 hover:underline truncate max-w-[150px] text-left"
+                      >
                         {file.name}
-                      </a>
+                      </button>
                       <button 
                         type="button"
                         onClick={() => setNewFiles(prev => prev.filter((_, i) => i !== idx))}
@@ -403,6 +492,7 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                     onChange={handleFileUpload}
                     disabled={isUploading}
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
+                    multiple
                   />
                   <label 
                     htmlFor="knowledge-file-upload"
@@ -479,7 +569,7 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                 {linkSearchTerm && (
                   <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg bg-white shadow-sm">
                     {linkType === 'Machine' && Array.from<string>(new Set(machineCapabilities.map(m => m.machineGroup)))
-                      .filter(m => m.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .filter(m => (m || '').toLowerCase().includes((linkSearchTerm || '').toLowerCase()))
                       .map(m => (
                       <div 
                         key={m}
@@ -496,7 +586,7 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                     ))}
                     
                     {linkType === 'Product' && productSpecs
-                      .filter(p => p.code.toLowerCase().includes(linkSearchTerm.toLowerCase()) || p.name.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .filter(p => (p.code || '').toLowerCase().includes((linkSearchTerm || '').toLowerCase()) || (p.name || '').toLowerCase().includes((linkSearchTerm || '').toLowerCase()))
                       .map(p => (
                       <div 
                         key={p.code}
@@ -513,7 +603,7 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                     ))}
 
                     {linkType === 'Inventory' && inventory
-                      .filter(i => i.code.toLowerCase().includes(linkSearchTerm.toLowerCase()) || i.name.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .filter(i => (i.code || '').toLowerCase().includes((linkSearchTerm || '').toLowerCase()) || (i.name || '').toLowerCase().includes((linkSearchTerm || '').toLowerCase()))
                       .map(i => (
                       <div 
                         key={i.id}
@@ -530,7 +620,7 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
                     ))}
 
                     {linkType === 'BOM' && boms
-                      .filter(b => b.productItem.toLowerCase().includes(linkSearchTerm.toLowerCase()))
+                      .filter(b => (b.productItem || '').toLowerCase().includes((linkSearchTerm || '').toLowerCase()))
                       .map(b => (
                       <div 
                         key={b.id || b.productItem}

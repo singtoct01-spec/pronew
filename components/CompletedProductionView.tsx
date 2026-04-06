@@ -22,9 +22,9 @@ export const CompletedProductionView: React.FC<CompletedProductionViewProps> = (
   const completedJobs = jobs.filter(j => j.status === 'Completed');
 
   const filteredJobs = completedJobs.filter(job => {
-    const matchesSearch = job.productItem.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         job.jobOrder.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.moldCode.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (job.productItem || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                         (job.jobOrder || '').toLowerCase().includes((searchTerm || '').toLowerCase()) ||
+                         (job.moldCode || '').toLowerCase().includes((searchTerm || '').toLowerCase());
     const matchesMachine = filterMachine === 'All' || job.machineId === filterMachine;
     return matchesSearch && matchesMachine;
   });
@@ -140,7 +140,7 @@ export const CompletedProductionView: React.FC<CompletedProductionViewProps> = (
                       <div className="text-xs text-emerald-600 font-bold">จบ: {formatDateShort(job.endDate)}</div>
                     </td>
                     <td className="px-4 py-4 text-right font-mono font-bold text-slate-700">
-                      {job.totalProduction.toLocaleString()}
+                      {(job.totalProduction || 0).toLocaleString()}
                     </td>
                     <td className="px-4 py-4 text-right font-mono font-bold text-blue-600">
                       {(job.actualProduction || 0).toLocaleString()}

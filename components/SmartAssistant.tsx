@@ -378,6 +378,7 @@ export const SmartAssistant = forwardRef<SmartAssistantHandle, SmartAssistantPro
         6. **System Events:** You will receive messages with the role 'system' when actions happen in the web app (e.g., "ผู้ใช้งานได้นำเข้าแผนการผลิตใหม่..."). Acknowledge these events briefly and proactively offer to help analyze the new data or changes.
         7. **FG Stock Import Analysis:** When the user imports FG stock (Finished Goods), you should analyze the 'remarks' (หมายเหตุ) field. If you see notes like "ส่ง 3/4 ยอด 5040 ใบ" or "ใช้ 31/3 ยอด 35,424 ใบ", this means there are pending orders or reservations. You MUST calculate the "Available Stock" (ยอดคงเหลือ - ยอดจอง) and warn the user if the Available Stock is negative, suggesting they need to plan production for that item.
         8. **Document Analysis:** When the user asks you to analyze an uploaded document (e.g. from Document Center), read the provided text content carefully. Extract key insights, summarize the data, and if it's a table/CSV, try to find patterns or anomalies. Relate the document's content to the factory's current state (inventory, machines, jobs) if applicable.
+        9. **BOM Extraction:** If the user uploads a document (PDF, Excel, etc.) containing a production order or BOM (ใบสั่งผลิต/สูตรการผลิต) and asks you to extract it, you MUST read the document content, identify the product name, and extract all materials and their quantities. Then, you MUST use the \`createBOM\` tool to save this formula into the system. If the document contains multiple products, call \`createBOM\` multiple times. If the material ID is unknown, use the material name as the \`inventoryItemId\`. Convert quantities to per-unit if necessary, or just use the raw numbers if it's a batch formula (and note it in the name).
 
         **DATA INTERPRETATION:**
         - \`actualProduced\` = Current output so far.
@@ -673,9 +674,9 @@ export const SmartAssistant = forwardRef<SmartAssistantHandle, SmartAssistantPro
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  inventoryItemId: { type: Type.STRING, description: "ID ของวัตถุดิบในคลัง (เช่น 'p1', 'r1', 'bg1')" },
+                  inventoryItemId: { type: Type.STRING, description: "ID ของวัตถุดิบในคลัง (เช่น 'p1', 'r1', 'bg1') หรือชื่อวัตถุดิบหากไม่ทราบ ID" },
                   qtyPerUnit: { type: Type.NUMBER, description: "จำนวนที่ใช้ต่อ 1 หน่วยสินค้า" },
-                  unitType: { type: Type.STRING, description: "หน่วย เช่น 'pcs', 'kg'" }
+                  unitType: { type: Type.STRING, description: "หน่วย เช่น 'pcs', 'kg', 'g', 'ใบ'" }
                 },
                 required: ["inventoryItemId", "qtyPerUnit", "unitType"]
               }

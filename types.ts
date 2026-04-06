@@ -1,7 +1,7 @@
 
 
 
-export type Status = 'Running' | 'Completed' | 'Delayed' | 'Stopped' | 'Paused' | 'Maintenance' | 'No Plan' | 'Rescheduled' | 'Planned';
+export type Status = 'Running' | 'Completed' | 'Delayed' | 'Stopped' | 'Paused' | 'Maintenance' | 'No Plan' | 'Rescheduled' | 'Planned' | 'Overproduced';
 
 export type DatePeriod = 'all' | 'today' | 'this_week' | 'this_month' | 'last_month';
 

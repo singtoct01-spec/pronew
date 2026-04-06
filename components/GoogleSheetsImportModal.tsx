@@ -18,6 +18,19 @@ export const GoogleSheetsImportModal: React.FC<ImportModalProps> = ({ isOpen, on
 
   if (!isOpen) return null;
 
+  const handleJobChange = (index: number, field: keyof Partial<ProductionJob>, value: any) => {
+    const updatedJobs = [...parsedJobs];
+    updatedJobs[index] = { ...updatedJobs[index], [field]: value };
+    setParsedJobs(updatedJobs);
+  };
+
+  const formatForDateTimeLocal = (isoString?: string) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
   const handlePasteProcess = () => {
     try {
       const pasteData = textareaRef.current?.value || '';
@@ -28,178 +41,173 @@ export const GoogleSheetsImportModal: React.FC<ImportModalProps> = ({ isOpen, on
       
       const jobMap = new Map<string, Partial<ProductionJob>>();
 
-      rows.forEach((row, i) => {
-        // If row only has 1 column, it might be space-separated (fallback for weird copy-pastes)
+      // Find the first data row (a row that has a date DD/MM/YYYY or numbers with commas)
+      let firstDataRowIdx = -1;
+      for (let i = 0; i < Math.min(10, rows.length); i++) {
+        const hasDate = rows[i].some(cell => cell.match(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/));
+        const hasNumberWithComma = rows[i].some(cell => cell.match(/^\s*\d{1,3}(,\d{3})+\s*$/));
+        if (hasDate || hasNumberWithComma) {
+          firstDataRowIdx = i;
+          break;
+        }
+      }
+
+      if (firstDataRowIdx === -1) {
+         firstDataRowIdx = 1; // Fallback
+      }
+
+      // Merge headers to handle Excel merged cells (which leave empty cells to the right)
+      const mergedHeaders: string[] = [];
+      const maxCols = Math.max(...rows.map(r => r.length));
+      
+      for (let col = 0; col < maxCols; col++) {
+        let headerParts = [];
+        for (let r = 0; r < firstDataRowIdx; r++) {
+          const cell = rows[r][col]?.trim();
+          if (cell) {
+             headerParts.push(cell);
+          } else {
+             // Look left for merged cell parent
+             let parent = '';
+             for (let left = col - 1; left >= 0; left--) {
+                if (rows[r][left]?.trim()) {
+                   parent = rows[r][left].trim();
+                   break;
+                }
+             }
+             if (parent) {
+                 headerParts.push(parent);
+             }
+          }
+        }
+        mergedHeaders.push([...new Set(headerParts)].join(' ').toLowerCase());
+      }
+
+      let machineIdx = mergedHeaders.findIndex(h => h.includes('machine') || h.includes('เครื่อง'));
+      let productIdx = mergedHeaders.findIndex(h => h.includes('product') || h.includes('สินค้า') || h.includes('รายการ'));
+      let moldIdx = mergedHeaders.findIndex(h => h.includes('mold') || h.includes('แม่พิมพ์'));
+      let targetIdx = mergedHeaders.findIndex(h => h.includes('target') || h.includes('ยอดผลิต') || h.includes('เป้าหมาย'));
+      let jobOrderIdx = mergedHeaders.findIndex(h => h.includes('job') || h.includes('เลขที่'));
+      let noteIdx = mergedHeaders.findIndex(h => h.includes('note') || h.includes('หมายเหตุ'));
+      let actualIdx = mergedHeaders.findIndex(h => h.includes('actual') || h.includes('ยอดการผลิตได้') || h.includes('ยอดการผลิดได้') || h.includes('ยอดที่ได้') || h.includes('ผลิตได้'));
+      
+      let startDateIdx = mergedHeaders.findIndex(h => (h.includes('เริ่มผลิต') || h.includes('start')) && (h.includes('วันที่') || h.includes('date')));
+      let startTimeIdx = mergedHeaders.findIndex(h => (h.includes('เริ่มผลิต') || h.includes('start')) && (h.includes('เวลา') || h.includes('time')));
+      let endDateIdx = mergedHeaders.findIndex(h => (h.includes('กำหนดแล้วเสร็จ') || h.includes('end')) && (h.includes('วันที่') || h.includes('date')));
+      let endTimeIdx = mergedHeaders.findIndex(h => (h.includes('กำหนดแล้วเสร็จ') || h.includes('end')) && (h.includes('เวลา') || h.includes('time')));
+
+      if (startDateIdx === -1) {
+          startDateIdx = mergedHeaders.findIndex(h => h.includes('เริ่มผลิต') || h.includes('start'));
+          if (startTimeIdx === -1 && startDateIdx !== -1) startTimeIdx = startDateIdx + 1;
+      }
+
+      if (endDateIdx === -1) {
+          endDateIdx = mergedHeaders.findIndex(h => h.includes('กำหนดแล้วเสร็จ') || h.includes('end'));
+          if (endTimeIdx === -1 && endDateIdx !== -1) endTimeIdx = endDateIdx + 1;
+      }
+
+      // Fallback to standard format if headers are not found
+      if (machineIdx === -1 && productIdx === -1 && firstDataRowIdx === 0) {
+          machineIdx = 0;
+          productIdx = 1;
+          moldIdx = 2;
+          targetIdx = 4;
+          startDateIdx = 6;
+          startTimeIdx = 7;
+          endDateIdx = 9;
+          endTimeIdx = 10;
+          jobOrderIdx = 12;
+          noteIdx = 13;
+          actualIdx = 15;
+      }
+
+      const parseThaiDate = (dateStr: string, timeStr: string) => {
+        if (!dateStr) return null;
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          let year = parseInt(parts[2], 10);
+          if (year > 2500) year -= 543;
+          
+          let hours = 0;
+          let minutes = 0;
+          if (timeStr) {
+             const timeParts = timeStr.includes(':') ? timeStr.split(':') : timeStr.split('.');
+             if (timeParts.length >= 2) {
+                hours = parseInt(timeParts[0], 10);
+                minutes = parseInt(timeParts[1], 10);
+             }
+          }
+          const date = new Date(year, month, day, hours, minutes);
+          if (!isNaN(date.getTime())) return date.toISOString();
+        }
+        return null;
+      };
+
+      rows.slice(firstDataRowIdx).forEach((row, i) => {
         let cols = row;
         if (cols.length === 1 && cols[0].includes(' ')) {
            const splitByMultipleSpaces = cols[0].split(/\s{2,}/);
            if (splitByMultipleSpaces.length > 2) {
                cols = splitByMultipleSpaces;
            } else {
-               // Last resort: split by single space, but this might break "09.00 น."
                cols = cols[0].split(/\s+/);
            }
         }
 
         if (cols.length < 3) return; // Not enough data
+        if (!cols[0]?.trim() && !cols[1]?.trim()) return; // Empty row
 
-        // Skip header rows
-        const firstCell = cols[0]?.trim();
-        if (firstCell === 'เครื่อง' || firstCell === 'Machine' || firstCell === 'JobOrder' || cols[4]?.trim() === 'ยอดผลิต') return;
-        if (!firstCell && cols[6]?.trim() === 'วันที่') return;
+        let jobOrder = jobOrderIdx !== -1 ? cols[jobOrderIdx]?.trim() : `JOB-IMP-${i}`;
+        let productItem = productIdx !== -1 ? cols[productIdx]?.trim() : 'Unknown Product';
+        let machineId = machineIdx !== -1 ? cols[machineIdx]?.trim() : 'IP1';
+        let moldCode = moldIdx !== -1 ? cols[moldIdx]?.trim() : 'Standard';
+        let totalProduction = targetIdx !== -1 ? parseInt(cols[targetIdx]?.replace(/,/g, '')) || 0 : 0;
+        let actualProduction = actualIdx !== -1 ? parseInt(cols[actualIdx]?.replace(/,/g, '')) || 0 : 0;
+        let note = noteIdx !== -1 ? cols[noteIdx]?.trim() : '';
+        
+        let startDate: string | undefined;
+        let endDate: string | undefined;
 
-        let jobOrder = '';
-        let productItem = '';
-        let machineId = '';
-        let capacityPerShift = 0;
-        let totalProduction = 1000;
-        let actualProduction = 0;
-        let color = '';
-        let startDate = new Date().toISOString();
-        let endDate = new Date(Date.now() + 86400000).toISOString();
-        let moldCode = 'Standard';
-        let note = '';
-
-        // Find all date columns to anchor the parsing
-        const dateIndices: number[] = [];
-        for (let j = 4; j < cols.length; j++) {
-            if (cols[j]?.match(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/)) {
-                dateIndices.push(j);
-            }
+        if (startDateIdx !== -1) {
+            const startD = cols[startDateIdx]?.trim();
+            const startT = startTimeIdx !== -1 ? cols[startTimeIdx]?.trim() : '';
+            startDate = parseThaiDate(startD, startT) || undefined;
         }
 
-        const parseThaiDate = (dateStr: string, timeStr: string) => {
-          if (!dateStr) return null;
-          const parts = dateStr.split('/');
-          if (parts.length === 3) {
-            const day = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10) - 1;
-            let year = parseInt(parts[2], 10);
-            if (year > 2500) year -= 543;
-            
-            let hours = 0;
-            let minutes = 0;
-            if (timeStr) {
-               const timeParts = timeStr.includes(':') ? timeStr.split(':') : timeStr.split('.');
-               if (timeParts.length >= 2) {
-                  hours = parseInt(timeParts[0], 10);
-                  minutes = parseInt(timeParts[1], 10);
-               }
-            }
-            const date = new Date(year, month, day, hours, minutes);
-            if (!isNaN(date.getTime())) return date.toISOString();
-          }
-          return null;
-        };
-
-        if (dateIndices.length >= 2 || cols.length >= 10) {
-            machineId = cols[0]?.trim() || 'IP1';
-            productItem = cols[1]?.trim() || 'Unknown Product';
-            moldCode = cols[2]?.trim() || 'Standard';
-            capacityPerShift = parseInt(cols[3]?.replace(/,/g, '')) || 0;
-            
-            const startIdx = dateIndices.length > 0 ? dateIndices[0] : 6;
-            
-            // Total production is usually 2 columns before start date, or at index 4
-            const prodCol = startIdx >= 6 ? 4 : (startIdx > 2 ? startIdx - 2 : 4);
-            totalProduction = parseInt(cols[prodCol]?.replace(/,/g, '')) || 1000;
-            
-            // Color is usually 1 column before start date
-            if (startIdx > prodCol + 1) {
-                color = cols[startIdx - 1]?.trim() || '';
-            }
-
-            if (dateIndices.length >= 2) {
-                const startDateStr = cols[dateIndices[0]]?.trim();
-                const startTimeStr = cols[dateIndices[0] + 1]?.trim();
-                const endDateStr = cols[dateIndices[1]]?.trim();
-                const endTimeStr = cols[dateIndices[1] + 1]?.trim();
-                
-                startDate = parseThaiDate(startDateStr, startTimeStr) || new Date().toISOString();
-                endDate = parseThaiDate(endDateStr, endTimeStr) || new Date(Date.now() + 86400000).toISOString();
-
-                // Find Job Order (first non-empty string after end date that isn't "น.")
-                let jobOrderIdx = -1;
-                for (let j = dateIndices[1] + 2; j <= dateIndices[1] + 6; j++) {
-                    const val = cols[j]?.trim();
-                    if (val && val !== 'น.' && val !== 'น') {
-                        jobOrderIdx = j;
-                        break;
-                    }
-                }
-                
-                if (jobOrderIdx !== -1) {
-                    jobOrder = cols[jobOrderIdx]?.trim() || `JOB-IMP-${i}`;
-                    
-                    // Note is usually the next column if it's not a number
-                    const nextVal = cols[jobOrderIdx + 1]?.trim();
-                    if (nextVal && isNaN(Number(nextVal.replace(/,/g, '')))) {
-                        note = nextVal;
-                    }
-                    
-                    // Find actual production (first number after Job Order)
-                    let actualProd = 0;
-                    for (let j = jobOrderIdx + 1; j <= jobOrderIdx + 8; j++) {
-                        const val = cols[j]?.replace(/,/g, '').trim();
-                        if (val && val !== '-' && !isNaN(Number(val))) {
-                            actualProd = parseInt(val);
-                            break;
-                        }
-                    }
-                    actualProduction = actualProd;
-                } else {
-                    jobOrder = `JOB-IMP-${i}`;
-                }
-
-            } else {
-                // Fallback if dates not found but has many columns
-                jobOrder = cols[10]?.trim() || `JOB-IMP-${i}`;
-                note = cols[11]?.trim() || '';
-                actualProduction = parseInt(cols[12]?.replace(/,/g, '')) || 0;
-            }
-        } else {
-            // Old format fallback
-            jobOrder = cols[0]?.trim() || `JOB-IMP-${i}`;
-            productItem = cols[1]?.trim() || 'Unknown Product';
-            machineId = cols[2]?.trim() || 'IP1';
-            totalProduction = parseInt(cols[3]?.replace(/,/g, '')) || 1000;
-            
-            try {
-              if (cols[4] && cols[4].trim() !== '') {
-                const parsedStart = new Date(cols[4]);
-                if (!isNaN(parsedStart.getTime())) startDate = parsedStart.toISOString();
-              }
-            } catch (e) {}
-            
-            try {
-              if (cols[5] && cols[5].trim() !== '') {
-                const parsedEnd = new Date(cols[5]);
-                if (!isNaN(parsedEnd.getTime())) endDate = parsedEnd.toISOString();
-              }
-            } catch (e) {}
+        if (endDateIdx !== -1) {
+            const endD = cols[endDateIdx]?.trim();
+            const endT = endTimeIdx !== -1 ? cols[endTimeIdx]?.trim() : '';
+            endDate = parseThaiDate(endD, endT) || undefined;
         }
+
+        if (!jobOrder) jobOrder = `JOB-IMP-${i}`;
 
         const newJob: Partial<ProductionJob> = {
           id: `IMP-${Date.now()}-${i}`,
           jobOrder,
           productItem,
           machineId,
-          capacityPerShift,
+          capacityPerShift: 0,
           totalProduction,
           actualProduction,
-          color,
+          color: '',
           startDate,
           endDate,
-          status: 'Planned',
+          status: actualProduction >= totalProduction && totalProduction > 0 ? 'Overproduced' : 'Planned',
           moldCode,
           note
         };
 
         if (jobMap.has(jobOrder)) {
           const existingJob = jobMap.get(jobOrder)!;
-          // ยึดเอายอดผลิตตัวที่เพิ่มขึ้นมาเข้าแผน
           existingJob.totalProduction = Math.max(existingJob.totalProduction || 0, newJob.totalProduction || 0);
           existingJob.actualProduction = Math.max(existingJob.actualProduction || 0, newJob.actualProduction || 0);
+          if (newJob.note) existingJob.note = newJob.note;
+          if (newJob.startDate) existingJob.startDate = newJob.startDate;
+          if (newJob.endDate) existingJob.endDate = newJob.endDate;
+          existingJob.status = (existingJob.actualProduction || 0) >= (existingJob.totalProduction || 0) ? 'Overproduced' : 'Planned';
         } else {
           jobMap.set(jobOrder, newJob);
         }
@@ -233,8 +241,8 @@ export const GoogleSheetsImportModal: React.FC<ImportModalProps> = ({ isOpen, on
         data.forEach((row, i) => {
           const jobOrder = row['JobOrder'] || row['เลขที่ใบสั่งผลิต'] || row['เลขที่ใบสั่งผลิต '] || `JOB-EXC-${i}`;
           
-          let startDate = new Date().toISOString();
-          let endDate = new Date(Date.now() + 86400000).toISOString();
+          let startDate: string | undefined;
+          let endDate: string | undefined;
           
           // Try to parse dates if available
           const startDateStr = row['StartDate'] || row['เริ่มผลิต วันที่'] || row['เริ่มผลิตวันที่'];
@@ -272,8 +280,8 @@ export const GoogleSheetsImportModal: React.FC<ImportModalProps> = ({ isOpen, on
             return null;
           };
 
-          startDate = parseThaiDate(startDateStr, startTimeStr) || new Date().toISOString();
-          endDate = parseThaiDate(endDateStr, endTimeStr) || new Date(Date.now() + 86400000).toISOString();
+          startDate = parseThaiDate(startDateStr, startTimeStr) || undefined;
+          endDate = parseThaiDate(endDateStr, endTimeStr) || undefined;
 
           const totalProduction = parseInt(String(row['Target'] || row['เป้าหมาย'] || row['ยอดผลิต'] || 1000).replace(/,/g, '')) || 1000;
           const actualProduction = parseInt(String(row['Actual'] || row['ยอดการผลิดได้'] || row['ยอดการผลิตได้'] || 0).replace(/,/g, '')) || 0;
@@ -287,7 +295,7 @@ export const GoogleSheetsImportModal: React.FC<ImportModalProps> = ({ isOpen, on
             actualProduction,
             startDate,
             endDate,
-            status: 'Planned',
+            status: actualProduction >= totalProduction && totalProduction > 0 ? 'Overproduced' : 'Planned',
             moldCode: row['Mold'] || row['แม่พิมพ์'] || row['รหัสแม่พิมพ์'] || 'Standard',
             note: row['Note'] || row['หมายเหตุ'] || ''
           };
@@ -296,6 +304,10 @@ export const GoogleSheetsImportModal: React.FC<ImportModalProps> = ({ isOpen, on
             const existingJob = jobMap.get(jobOrder)!;
             existingJob.totalProduction = Math.max(existingJob.totalProduction || 0, newJob.totalProduction || 0);
             existingJob.actualProduction = Math.max(existingJob.actualProduction || 0, newJob.actualProduction || 0);
+            if (newJob.note) existingJob.note = newJob.note;
+            if (newJob.startDate) existingJob.startDate = newJob.startDate;
+            if (newJob.endDate) existingJob.endDate = newJob.endDate;
+            existingJob.status = (existingJob.actualProduction || 0) >= (existingJob.totalProduction || 0) ? 'Overproduced' : 'Planned';
           } else {
             jobMap.set(jobOrder, newJob);
           }
@@ -447,32 +459,51 @@ export const GoogleSheetsImportModal: React.FC<ImportModalProps> = ({ isOpen, on
                   พบข้อมูล {parsedJobs.length} รายการ
                 </h3>
               </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-100 text-slate-600 sticky top-0">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg overflow-hidden max-h-[50vh] overflow-y-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm">
                     <tr>
                       <th className="px-4 py-2 font-medium">Job Order</th>
                       <th className="px-4 py-2 font-medium">Product</th>
                       <th className="px-4 py-2 font-medium">Machine</th>
-                      <th className="px-4 py-2 font-medium">Target</th>
+                      <th className="px-4 py-2 font-medium text-right">Target</th>
+                      <th className="px-4 py-2 font-medium text-right">Actual</th>
+                      <th className="px-4 py-2 font-medium">Start Date</th>
+                      <th className="px-4 py-2 font-medium">End Date</th>
+                      <th className="px-4 py-2 font-medium">Note</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {parsedJobs.slice(0, 5).map((job, idx) => (
-                      <tr key={idx} className="bg-white">
-                        <td className="px-4 py-2 font-mono text-xs">{job.jobOrder}</td>
-                        <td className="px-4 py-2">{job.productItem}</td>
-                        <td className="px-4 py-2">{job.machineId}</td>
-                        <td className="px-4 py-2">{job.totalProduction}</td>
+                    {parsedJobs.map((job, idx) => (
+                      <tr key={idx} className="bg-white hover:bg-slate-50">
+                        <td className="px-4 py-2 font-mono text-xs">
+                          <input type="text" value={job.jobOrder || ''} onChange={(e) => handleJobChange(idx, 'jobOrder', e.target.value)} className="w-full p-1 border border-slate-300 rounded text-xs" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={job.productItem || ''} onChange={(e) => handleJobChange(idx, 'productItem', e.target.value)} className="w-full p-1 border border-slate-300 rounded text-xs" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={job.machineId || ''} onChange={(e) => handleJobChange(idx, 'machineId', e.target.value)} className="w-full p-1 border border-slate-300 rounded text-xs" />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input type="number" value={job.totalProduction || 0} onChange={(e) => handleJobChange(idx, 'totalProduction', parseInt(e.target.value) || 0)} className="w-20 p-1 border border-slate-300 rounded text-xs text-right" />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input type="number" value={job.actualProduction || 0} onChange={(e) => handleJobChange(idx, 'actualProduction', parseInt(e.target.value) || 0)} className="w-20 p-1 border border-slate-300 rounded text-xs text-right" />
+                        </td>
+                        <td className="px-4 py-2 text-xs">
+                          <input type="datetime-local" value={formatForDateTimeLocal(job.startDate)} onChange={(e) => handleJobChange(idx, 'startDate', e.target.value ? new Date(e.target.value).toISOString() : undefined)} className="p-1 border border-slate-300 rounded text-xs" />
+                        </td>
+                        <td className="px-4 py-2 text-xs">
+                          <input type="datetime-local" value={formatForDateTimeLocal(job.endDate)} onChange={(e) => handleJobChange(idx, 'endDate', e.target.value ? new Date(e.target.value).toISOString() : undefined)} className="p-1 border border-slate-300 rounded text-xs" />
+                        </td>
+                        <td className="px-4 py-2 text-xs">
+                          <input type="text" value={job.note || ''} onChange={(e) => handleJobChange(idx, 'note', e.target.value)} className="w-full p-1 border border-slate-300 rounded text-xs" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {parsedJobs.length > 5 && (
-                  <div className="p-2 text-center text-xs text-slate-500 bg-white border-t border-slate-100">
-                    ... และอีก {parsedJobs.length - 5} รายการ
-                  </div>
-                )}
               </div>
             </div>
           )}
