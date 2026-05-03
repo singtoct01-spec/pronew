@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useRef } from 'react';
 import { FormTemplate } from '../types';
 import { FileText, Plus, Search, Trash2, Eye, Sparkles, Upload } from 'lucide-react';
@@ -55,7 +56,7 @@ export const FormTemplatesView: React.FC<FormTemplatesViewProps> = ({ forms, onV
         }
       } catch (error) {
         console.error("Error parsing Excel file:", error);
-        alert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel");
+        uiAlert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel");
       }
     };
     reader.readAsBinaryString(file);
@@ -96,7 +97,7 @@ export const FormTemplatesView: React.FC<FormTemplatesViewProps> = ({ forms, onV
            </button>
            <button 
              className="flex-1 md:flex-none bg-brand-50 text-brand-700 px-4 py-2 rounded-xl font-medium hover:bg-brand-100 transition-colors flex items-center justify-center gap-2"
-             onClick={() => onOpenAssistant ? onOpenAssistant() : alert('หากต้องการสร้างฟอร์มใหม่ กรุณาเปิดผู้ช่วย AI')}
+             onClick={() => onOpenAssistant ? onOpenAssistant() : uiAlert('หากต้องการสร้างฟอร์มใหม่ กรุณาเปิดผู้ช่วย AI')}
            >
              <Sparkles size={18} />
              <span>ให้ AI สร้างฟอร์มใหม่</span>
@@ -129,8 +130,8 @@ export const FormTemplatesView: React.FC<FormTemplatesViewProps> = ({ forms, onV
                 ดู / พิมพ์
               </button>
               <button 
-                onClick={() => {
-                  if (window.confirm('คุณต้องการลบแบบฟอร์มนี้ใช่หรือไม่?')) {
+                onClick={async () => {
+                  if (await uiConfirm('คุณต้องการลบแบบฟอร์มนี้ใช่หรือไม่?')) {
                     onDeleteForm(form.id);
                   }
                 }}

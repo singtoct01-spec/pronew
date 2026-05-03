@@ -1,3 +1,5 @@
+import { uiAlert, uiConfirm } from './utils/dialog';
+import { GlobalDialog } from './components/GlobalDialog';
 
 
 
@@ -812,7 +814,7 @@ const App: React.FC = () => {
       return true;
     } catch (error) {
       console.error("Error batch upserting jobs in Firebase:", error);
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูลแบบ Batch: " + (error as Error).message);
+      uiAlert("เกิดข้อผิดพลาดในการบันทึกข้อมูลแบบ Batch: " + (error as Error).message);
       return false;
     }
   };
@@ -887,12 +889,12 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error saving shift production log:", error);
-      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      uiAlert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     }
   };
 
   const handleDeleteDowntimeLog = async (logId: string) => {
-    if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบบันทึกเครื่องจักรขัดข้องนี้?')) {
+    if (await uiConfirm('คุณแน่ใจหรือไม่ว่าต้องการลบบันทึกเครื่องจักรขัดข้องนี้?')) {
       try {
         const logToDelete = downtimeLogs.find(l => l.id === logId);
         await deleteDoc(doc(db, 'downtimeLogs', logId));
@@ -903,7 +905,7 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error("Error deleting downtime log:", error);
-        alert('เกิดข้อผิดพลาดในการลบข้อมูล');
+        uiAlert('เกิดข้อผิดพลาดในการลบข้อมูล');
       }
     }
   };
@@ -926,12 +928,12 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error saving daily report:", error);
-      alert("เกิดข้อผิดพลาดในการบันทึกรายงาน");
+      uiAlert("เกิดข้อผิดพลาดในการบันทึกรายงาน");
     }
   };
 
   const handleDeleteDailyReport = async (id: string) => {
-    if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายงานนี้?')) {
+    if (await uiConfirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายงานนี้?')) {
       try {
         await deleteDoc(doc(db, 'dailyReports', id));
         
@@ -941,7 +943,7 @@ const App: React.FC = () => {
         }
       } catch (error) {
         console.error("Error deleting daily report:", error);
-        alert("เกิดข้อผิดพลาดในการลบรายงาน");
+        uiAlert("เกิดข้อผิดพลาดในการลบรายงาน");
       }
     }
   };
@@ -959,20 +961,20 @@ const App: React.FC = () => {
       const sanitizedForm = JSON.parse(JSON.stringify(newForm));
       await setDoc(doc(db, 'forms', sanitizedForm.id), sanitizedForm);
       setCustomForm(prev => prev ? { ...prev, html, title, id: sanitizedForm.id } : null);
-      alert('บันทึกแบบฟอร์มสำเร็จ');
+      uiAlert('บันทึกแบบฟอร์มสำเร็จ');
     } catch (error) {
       console.error("Error saving form template:", error);
-      alert('เกิดข้อผิดพลาดในการบันทึกแบบฟอร์ม');
+      uiAlert('เกิดข้อผิดพลาดในการบันทึกแบบฟอร์ม');
     }
   };
 
   const handleDeleteFormTemplate = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'forms', id));
-      alert('ลบแบบฟอร์มสำเร็จ');
+      uiAlert('ลบแบบฟอร์มสำเร็จ');
     } catch (error) {
       console.error("Error deleting form template:", error);
-      alert('เกิดข้อผิดพลาดในการลบแบบฟอร์ม: ' + (error as Error).message);
+      uiAlert('เกิดข้อผิดพลาดในการลบแบบฟอร์ม: ' + (error as Error).message);
     }
   };
 
@@ -992,10 +994,10 @@ const App: React.FC = () => {
       };
       const sanitizedKnowledge = JSON.parse(JSON.stringify(newKnowledge));
       await setDoc(doc(db, 'customKnowledge', sanitizedKnowledge.id), sanitizedKnowledge);
-      alert('บันทึกข้อมูลความรู้สำเร็จ');
+      uiAlert('บันทึกข้อมูลความรู้สำเร็จ');
     } catch (error) {
       console.error("Error saving custom knowledge:", error);
-      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      uiAlert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     }
   };
 
@@ -1169,7 +1171,7 @@ const App: React.FC = () => {
         }
       }
       
-      alert(`นำเข้า/อัปเดตข้อมูลสำเร็จ ${allOps.length} รายการ`);
+      uiAlert(`นำเข้า/อัปเดตข้อมูลสำเร็จ ${allOps.length} รายการ`);
       
       // Notify assistant
       if (assistantRef.current) {
@@ -1177,7 +1179,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error importing jobs:", error);
-      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล");
     }
   };
 
@@ -1274,7 +1276,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error importing inventory:", error);
-      alert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + (error as Error).message);
+      uiAlert("เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + (error as Error).message);
     }
   };
 
@@ -1299,7 +1301,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error adding inventory:", error);
-      alert("เกิดข้อผิดพลาดในการเพิ่มข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการเพิ่มข้อมูล");
     }
   };
 
@@ -1323,7 +1325,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error updating inventory:", error);
-      alert("เกิดข้อผิดพลาดในการแก้ไขข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการแก้ไขข้อมูล");
     }
   };
 
@@ -1345,7 +1347,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error deleting inventory:", error);
-      alert("เกิดข้อผิดพลาดในการลบข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการลบข้อมูล");
     }
   };
 
@@ -1370,7 +1372,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error adding BOM:", error);
-      alert("เกิดข้อผิดพลาดในการเพิ่มสูตรการผลิต");
+      uiAlert("เกิดข้อผิดพลาดในการเพิ่มสูตรการผลิต");
     }
   };
 
@@ -1395,7 +1397,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error updating BOM:", error);
-      alert("เกิดข้อผิดพลาดในการแก้ไขสูตรการผลิต");
+      uiAlert("เกิดข้อผิดพลาดในการแก้ไขสูตรการผลิต");
     }
   };
 
@@ -1417,7 +1419,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Error deleting BOM:", error);
-      alert("เกิดข้อผิดพลาดในการลบสูตรการผลิต");
+      uiAlert("เกิดข้อผิดพลาดในการลบสูตรการผลิต");
     }
   };
 
@@ -1796,6 +1798,7 @@ const App: React.FC = () => {
           await handleImportJobs(importedJobs);
         }}
       />
+      <GlobalDialog />
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 
 import React, { useState } from 'react';
 import { CustomKnowledge, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability } from '../types';
@@ -47,8 +48,8 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
     }
   };
 
-  const handleDeleteBomClick = (id: string) => {
-    if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสูตรการผลิตนี้?')) {
+  const handleDeleteBomClick = async (id: string) => {
+    if (await uiConfirm('คุณแน่ใจหรือไม่ว่าต้องการลบสูตรการผลิตนี้?')) {
       onDeleteBom?.(id);
     }
   };
@@ -493,7 +494,7 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ customKnowledge, i
         inventory={inventory} 
         onImport={(importedBoms) => {
           importedBoms.forEach(bom => onAddBom?.(bom));
-          alert('นำเข้าสูตรการผลิตสำเร็จ ' + importedBoms.length + ' รายการ');
+          uiAlert('นำเข้าสูตรการผลิตสำเร็จ ' + importedBoms.length + ' รายการ');
         }} 
       />
 

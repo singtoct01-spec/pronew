@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useRef, useEffect } from 'react';
 import { AppDocument } from '../types';
 import { FileText, Upload, Trash2, Search, FileSpreadsheet, File as FileIcon, Eye, BrainCircuit, X, Download } from 'lucide-react';
@@ -90,10 +91,10 @@ export const DocumentCenter: React.FC<DocumentCenterProps> = ({ onAnalyzeFile })
       });
       setPreviewDoc({ ...previewDoc, parsedContent: editedText });
       setIsEditingText(false);
-      alert('บันทึกการแก้ไขเรียบร้อยแล้ว');
+      uiAlert('บันทึกการแก้ไขเรียบร้อยแล้ว');
     } catch (error) {
       console.error("Error saving text:", error);
-      alert('เกิดข้อผิดพลาดในการบันทึก');
+      uiAlert('เกิดข้อผิดพลาดในการบันทึก');
     } finally {
       setIsSavingText(false);
     }
@@ -274,9 +275,9 @@ export const DocumentCenter: React.FC<DocumentCenterProps> = ({ onAnalyzeFile })
     } catch (error: any) {
       console.error("Error processing files:", error);
       if (error.message === "CORS_TIMEOUT") {
-        alert("การอัปโหลดใช้เวลานานผิดปกติ อาจเกิดจากไม่ได้ตั้งค่า CORS ใน Firebase Storage หรือไฟล์มีขนาดใหญ่เกินไป\n\nวิธีแก้: กรุณาใช้ไฟล์ขนาดเล็กกว่า 800KB หรือติดต่อผู้ดูแลระบบเพื่อตั้งค่า CORS");
+        uiAlert("การอัปโหลดใช้เวลานานผิดปกติ อาจเกิดจากไม่ได้ตั้งค่า CORS ใน Firebase Storage หรือไฟล์มีขนาดใหญ่เกินไป\n\nวิธีแก้: กรุณาใช้ไฟล์ขนาดเล็กกว่า 800KB หรือติดต่อผู้ดูแลระบบเพื่อตั้งค่า CORS");
       } else {
-        alert("เกิดข้อผิดพลาดในการจัดการไฟล์");
+        uiAlert("เกิดข้อผิดพลาดในการจัดการไฟล์");
       }
       setIsUploading(false);
       setUploadProgress(0);
@@ -344,7 +345,7 @@ export const DocumentCenter: React.FC<DocumentCenterProps> = ({ onAnalyzeFile })
       setDeleteConfirmDoc(null);
     } catch (error) {
       console.error("Error deleting document:", error);
-      alert("เกิดข้อผิดพลาดในการลบไฟล์");
+      uiAlert("เกิดข้อผิดพลาดในการลบไฟล์");
       setDeleteConfirmDoc(null);
     }
   };
@@ -392,7 +393,7 @@ export const DocumentCenter: React.FC<DocumentCenterProps> = ({ onAnalyzeFile })
       }
     } catch (error) {
       console.error("Error downloading file:", error);
-      alert("เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์");
+      uiAlert("เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์");
     }
   };
 

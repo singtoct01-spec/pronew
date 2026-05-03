@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useRef } from 'react';
 import { Upload, Search, FileSpreadsheet, Package, AlertTriangle, CheckCircle, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -81,7 +82,7 @@ export const InventoryDashboard: React.FC = () => {
       
     } catch (error) {
       console.error("Error parsing Excel:", error);
-      alert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel กรุณาตรวจสอบรูปแบบไฟล์");
+      uiAlert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel กรุณาตรวจสอบรูปแบบไฟล์");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

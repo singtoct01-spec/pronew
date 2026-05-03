@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useEffect } from 'react';
 import { ProductBOM, InventoryItem, ProductSpec } from '../types';
 import { X, Save, Plus, Trash2, Copy } from 'lucide-react';
@@ -85,9 +86,9 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
     }
   };
 
-  const handleApplyTemplate = () => {
+  const handleApplyTemplate = async () => {
     if (!selectedTemplate || !templateWeight) {
-      alert('กรุณาเลือกโครงสร้างหลักและระบุน้ำหนักรวม (กรัม)');
+      uiAlert('กรุณาเลือกโครงสร้างหลักและระบุน้ำหนักรวม (กรัม)');
       return;
     }
     
@@ -115,7 +116,7 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
       };
     });
 
-    if (materials.length === 0 || window.confirm('ต้องการแทนที่ส่วนประกอบเดิมด้วยโครงสร้างหลักนี้หรือไม่?')) {
+    if (materials.length === 0 || await uiConfirm('ต้องการแทนที่ส่วนประกอบเดิมด้วยโครงสร้างหลักนี้หรือไม่?')) {
       setMaterials(newMaterials as any);
     }
   };
@@ -149,18 +150,18 @@ export const BomModal: React.FC<BomModalProps> = ({ isOpen, onClose, onSave, ini
     e.preventDefault();
     
     if (!productItem.trim()) {
-      alert('กรุณาระบุชื่อสินค้า');
+      uiAlert('กรุณาระบุชื่อสินค้า');
       return;
     }
     
     if (materials.length === 0) {
-      alert('กรุณาเพิ่มส่วนประกอบอย่างน้อย 1 รายการ');
+      uiAlert('กรุณาเพิ่มส่วนประกอบอย่างน้อย 1 รายการ');
       return;
     }
     
     const hasEmptyMaterial = materials.some(m => !m.inventoryItemId || m.qtyPerUnit <= 0);
     if (hasEmptyMaterial) {
-      alert('กรุณาระบุวัตถุดิบและปริมาณให้ครบถ้วนและถูกต้อง');
+      uiAlert('กรุณาระบุวัตถุดิบและปริมาณให้ครบถ้วนและถูกต้อง');
       return;
     }
 

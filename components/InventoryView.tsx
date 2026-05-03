@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useRef } from 'react';
 import { InventoryItem, ProductBOM, ProductSpec } from '../types';
 import { Search, Package, AlertTriangle, Layers, Filter, Upload, FileDown, Plus, Edit2, Trash2, CheckCircle2, ArrowRight, CheckSquare, X, Copy, Printer } from 'lucide-react';
@@ -85,7 +86,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setBulkEditCategory('');
     } catch (error) {
       console.error("Error bulk updating:", error);
-      alert("เกิดข้อผิดพลาดในการอัปเดตข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการอัปเดตข้อมูล");
     } finally {
       setIsBulkUpdating(false);
     }
@@ -110,7 +111,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   
   const handleBulkDelete = async () => {
     if (selectedItems.length === 0) return;
-    if (window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบรายการสินค้าที่เลือกทั้งหมด ${selectedItems.length} รายการ?\nการกระทำนี้ไม่สามารถเรียกคืนได้`)) {
+    if (await uiConfirm(`คุณแน่ใจหรือไม่ว่าต้องการลบรายการสินค้าที่เลือกทั้งหมด ${selectedItems.length} รายการ?\nการกระทำนี้ไม่สามารถเรียกคืนได้`)) {
       setIsBulkUpdating(true);
       try {
         for (const id of selectedItems) {
@@ -121,7 +122,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         setSelectedItems([]);
       } catch (error) {
         console.error("Error bulk deleting:", error);
-        alert("เกิดข้อผิดพลาดในการลบข้อมูล");
+        uiAlert("เกิดข้อผิดพลาดในการลบข้อมูล");
       } finally {
         setIsBulkUpdating(false);
       }
@@ -163,8 +164,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     document.body.removeChild(link);
   };
 
-const handleDeleteItemClick = (id: string) => {
-    if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการสินค้านี้?')) {
+const handleDeleteItemClick = async (id: string) => {
+    if (await uiConfirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการสินค้านี้?')) {
       onDeleteInventory?.(id);
     }
   };
@@ -191,8 +192,8 @@ const handleDeleteItemClick = (id: string) => {
     }
   };
 
-  const handleDeleteBomClick = (id: string) => {
-    if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสูตรการผลิตนี้?')) {
+  const handleDeleteBomClick = async (id: string) => {
+    if (await uiConfirm('คุณแน่ใจหรือไม่ว่าต้องการลบสูตรการผลิตนี้?')) {
       onDeleteBom?.(id);
     }
   };
@@ -306,11 +307,11 @@ const handleDeleteItemClick = (id: string) => {
     try {
       setIsImporting(true);
       await onImportInventory(pendingImportItems);
-      alert(`นำเข้าข้อมูลสำเร็จจำนวน ${pendingImportItems.length} รายการ`);
+      uiAlert(`นำเข้าข้อมูลสำเร็จจำนวน ${pendingImportItems.length} รายการ`);
       setPendingImportItems(null);
     } catch (error) {
       console.error("Error importing items:", error);
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
     } finally {
       setIsImporting(false);
     }

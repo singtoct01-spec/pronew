@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useEffect } from 'react';
 import { Users, Calendar, Clock, FileText, Printer, Plus, CheckSquare, AlertTriangle, X, ChevronRight, FileSignature, Target, FileBarChart } from 'lucide-react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
@@ -84,7 +85,7 @@ export const MeetingPlannerView: React.FC<MeetingPlannerViewProps> = ({ jobs, do
       resetForm();
     } catch (error) {
       console.error("Error saving meeting:", error);
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
     }
   };
 

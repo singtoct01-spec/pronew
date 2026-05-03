@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useEffect } from 'react';
 import { ProductionJob, Status, RawMaterial, ProductBOM, InventoryItem, ProductSpec } from '../types';
 import { X, Save, AlertCircle, Calendar, Plus, Trash2, Wand2, Ruler, Flame, GitCommit, PauseCircle, CheckCircle2, Upload } from 'lucide-react';
@@ -201,7 +202,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
     }
 
     if (!bom) {
-      if (!productOverride) alert(`ไม่พบสูตรการผลิต (BOM) สำหรับสินค้า "${product}" ${color ? `สี ${color}` : ''}`);
+      if (!productOverride) uiAlert(`ไม่พบสูตรการผลิต (BOM) สำหรับสินค้า "${product}" ${color ? `สี ${color}` : ''}`);
       return;
     }
 
@@ -230,7 +231,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
 
   const autoFillSpecsFromMaster = () => {
     if (!formData.productItem) {
-        alert('กรุณาระบุชื่อสินค้าก่อนดึงสเปค');
+        uiAlert('กรุณาระบุชื่อสินค้าก่อนดึงสเปค');
         return;
     }
 
@@ -258,7 +259,7 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
             productType: `${matchedSpec.type} (${matchedSpec.material})` || prev.productType
         }));
     } else {
-        alert('ไม่พบข้อมูลสเปคสำหรับสินค้านี้ในฐานข้อมูล');
+        uiAlert('ไม่พบข้อมูลสเปคสำหรับสินค้านี้ในฐานข้อมูล');
     }
   };
 

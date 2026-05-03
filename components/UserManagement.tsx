@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -75,21 +76,21 @@ export const UserManagement: React.FC = () => {
 
       await setDoc(doc(db, 'users', userId), userToSave, { merge: true });
       setIsModalOpen(false);
-      alert('บันทึกข้อมูลผู้ใช้งานสำเร็จ');
+      uiAlert('บันทึกข้อมูลผู้ใช้งานสำเร็จ');
     } catch (error) {
       console.error("Error saving user:", error);
-      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      uiAlert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     }
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (window.confirm('คุณต้องการลบผู้ใช้งานนี้ใช่หรือไม่?')) {
+    if (await uiConfirm('คุณต้องการลบผู้ใช้งานนี้ใช่หรือไม่?')) {
       try {
         await deleteDoc(doc(db, 'users', id));
-        alert('ลบผู้ใช้งานสำเร็จ');
+        uiAlert('ลบผู้ใช้งานสำเร็จ');
       } catch (error) {
         console.error("Error deleting user:", error);
-        alert('เกิดข้อผิดพลาดในการลบข้อมูล');
+        uiAlert('เกิดข้อผิดพลาดในการลบข้อมูล');
       }
     }
   };

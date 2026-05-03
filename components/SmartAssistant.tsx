@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 
 
 
@@ -177,7 +178,7 @@ export const SmartAssistant = forwardRef<SmartAssistantHandle, SmartAssistantPro
         // Handle PDF
         processPdfFile(file);
       } else {
-        alert('รองรับเฉพาะไฟล์รูปภาพ, PDF หรือ Excel (.xlsx, .xls) เท่านั้นครับ');
+        uiAlert('รองรับเฉพาะไฟล์รูปภาพ, PDF หรือ Excel (.xlsx, .xls) เท่านั้นครับ');
       }
     }
   };
@@ -227,7 +228,7 @@ export const SmartAssistant = forwardRef<SmartAssistantHandle, SmartAssistantPro
       });
     } catch (error) {
       console.error("Error reading excel:", error);
-      alert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel");
+      uiAlert("เกิดข้อผิดพลาดในการอ่านไฟล์ Excel");
     }
   };
 

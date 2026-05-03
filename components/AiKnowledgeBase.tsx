@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState } from 'react';
 import { CustomKnowledge, InventoryItem, ProductBOM, ProductSpec, MachineMoldCapability } from '../types';
 import { Search, BookOpen, Plus, Trash2, Edit2, BrainCircuit, Tag, Folder, Link as LinkIcon, X, Upload, FileText, File as FileIcon, Image as ImageIcon, Loader2 } from 'lucide-react';
@@ -132,9 +133,9 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
     } catch (error: any) {
       console.error("Error uploading file:", error);
       if (error.message === "CORS_TIMEOUT") {
-        alert("การอัปโหลดใช้เวลานานผิดปกติ อาจเกิดจากไม่ได้ตั้งค่า CORS ใน Firebase Storage หรือไฟล์มีขนาดใหญ่เกินไป\n\nวิธีแก้: กรุณาติดต่อผู้ดูแลระบบเพื่อตั้งค่า CORS");
+        uiAlert("การอัปโหลดใช้เวลานานผิดปกติ อาจเกิดจากไม่ได้ตั้งค่า CORS ใน Firebase Storage หรือไฟล์มีขนาดใหญ่เกินไป\n\nวิธีแก้: กรุณาติดต่อผู้ดูแลระบบเพื่อตั้งค่า CORS");
       } else {
-        alert("เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
+        uiAlert("เกิดข้อผิดพลาดในการอัปโหลดไฟล์");
       }
     } finally {
       setIsUploading(false);
@@ -169,7 +170,7 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
         window.document.body.removeChild(a);
       } catch (error) {
         console.error("Error downloading chunked file:", error);
-        alert("เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์");
+        uiAlert("เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์");
       }
     } else {
       window.open(file.url, '_blank');
@@ -251,8 +252,8 @@ export const AiKnowledgeBase: React.FC<AiKnowledgeBaseProps> = ({
     setEditingId(null);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?')) {
+  const handleDelete = async (id: string) => {
+    if (await uiConfirm('คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลนี้?')) {
       onDeleteKnowledge(id);
     }
   };

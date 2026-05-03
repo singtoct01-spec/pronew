@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState } from 'react';
 import { Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -54,7 +55,7 @@ export const ExcelSyncView: React.FC<ExcelSyncViewProps> = ({ jobs, inventory, b
       XLSX.writeFile(wb, `ProPlanner_DataExport_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (error) {
       console.error("Export error:", error);
-      alert("เกิดข้อผิดพลาดในการส่งออกข้อมูล");
+      uiAlert("เกิดข้อผิดพลาดในการส่งออกข้อมูล");
     } finally {
       setIsExporting(false);
     }

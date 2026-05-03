@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 
 import React, { useRef } from 'react';
 import { ProductionJob } from '../types';
@@ -43,7 +44,7 @@ export const DocumentHandoverView: React.FC<DocumentHandoverViewProps> = ({ jobs
       pdf.save(`Document_Handover_${new Date().getTime()}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
-      alert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
+      uiAlert("เกิดข้อผิดพลาดในการสร้างไฟล์ PDF");
     }
   };
 

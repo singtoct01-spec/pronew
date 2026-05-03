@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from '../utils/dialog';
 import React, { useState, useMemo } from 'react';
 import { ProductionJob, ShiftProductionLog, Machine } from '../types';
 import { Plus, Search, Filter, AlertTriangle, CheckCircle2, Calendar, Clock, Download } from 'lucide-react';
@@ -54,7 +55,7 @@ export const ShiftProductionView: React.FC<ShiftProductionViewProps> = ({ logs, 
     e.preventDefault();
     
     if (!formData.machineId || !formData.jobId || !formData.target || Number(formData.target) <= 0) {
-      alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+      uiAlert('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
 
@@ -63,7 +64,7 @@ export const ShiftProductionView: React.FC<ShiftProductionViewProps> = ({ logs, 
     const isBelowTarget = variance < 0;
 
     if (isBelowTarget && !formData.reason) {
-      alert('กรุณาระบุสาเหตุที่ผลิตไม่ได้ตามเป้าหมาย (ตกแคป)');
+      uiAlert('กรุณาระบุสาเหตุที่ผลิตไม่ได้ตามเป้าหมาย (ตกแคป)');
       return;
     }
 
