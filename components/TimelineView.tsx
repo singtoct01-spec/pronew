@@ -82,6 +82,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
       case 'Completed': return 'bg-blue-400 border-blue-500';
       case 'Maintenance': return 'bg-orange-400 border-orange-500 stripes-orange';
       case 'Paused': return 'bg-amber-400 border-amber-500';
+      case 'Cancelled': return 'bg-slate-200 border-slate-400 border-dashed opacity-75';
       default: return 'bg-slate-300 border-slate-400';
     }
   };
@@ -92,6 +93,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({ jobs, onUpdateJob })
       case 'Delayed': return 'bg-red-600';
       case 'Completed': return 'bg-blue-500';
       case 'Paused': return 'bg-amber-500';
+      case 'Cancelled': return 'bg-slate-400';
       default: return 'bg-slate-400';
     }
   };

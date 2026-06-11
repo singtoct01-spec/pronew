@@ -70,6 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, cur
         { id: 'documents', label: 'ศูนย์เอกสาร', icon: <FileText size={20} /> },
         { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
         { id: 'daily-report', label: 'รายงานประจำวัน (AI)', icon: <FileText size={20} /> },
+        { id: 'ai-analytics', label: 'วิเคราะห์เชิงลึก (AI Data)', icon: <BrainCircuit size={20} /> },
         { id: 'delayed-jobs-report', label: 'สรุปงานล่าช้า', icon: <AlertOctagon size={20} /> },
         { id: 'meeting-planner', label: 'แผนการประชุม (CAR/PAR)', icon: <Users size={20} /> },
       ]

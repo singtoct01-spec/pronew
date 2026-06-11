@@ -22,7 +22,9 @@ interface ProductionPlanProps {
   onImportJobs?: (jobs: Partial<ProductionJob>[]) => void;
   onPrintPlan?: () => void;
   onOpenImportModal?: () => void;
-  onUpdateJob?: (job: ProductionJob) => void;
+  onUpdateJob?: (job: ProductionJob, bypassLog?: boolean) => void;
+  onAddLog?: (action: string, details: string, targetId?: string) => void;
+  onNotifyEvent?: (text: string) => void;
 }
 
 const LiveClock = () => {
@@ -40,6 +42,52 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
   const [editingActualJobId, setEditingActualJobId] = useState<string | null>(null);
   const [tempActualQty, setTempActualQty] = useState<number>(0);
   const [movingJob, setMovingJob] = useState<ProductionJob | null>(null);
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<Status>('Planned');
+  
+  const toggleJobSelection = (jobId: string) => {
+    setSelectedJobIds(prev => 
+      prev.includes(jobId) ? prev.filter(id => id !== jobId) : [...prev, jobId]
+    );
+  };
+
+  const toggleSelectMachineJobs = (machineJobs: ProductionJob[]) => {
+    const allSelected = machineJobs.every(job => selectedJobIds.includes(job.id));
+    if (allSelected) {
+      setSelectedJobIds(prev => prev.filter(id => !machineJobs.find(j => j.id === id)));
+    } else {
+      const newIds = machineJobs.filter(job => !selectedJobIds.includes(job.id)).map(job => job.id);
+      setSelectedJobIds(prev => [...prev, ...newIds]);
+    }
+  };
+
+  const clearSelection = () => setSelectedJobIds([]);
+
+  const [isUpdatingBulk, setIsUpdatingBulk] = useState(false);
+
+  const handleBulkUpdateStatus = async () => {
+    if (!onUpdateJob) return;
+    setIsUpdatingBulk(true);
+    const jobsToUpdate = jobs.filter(j => selectedJobIds.includes(j.id));
+    try {
+      for (let i = 0; i < jobsToUpdate.length; i++) {
+        // Fire and forget individually, bypass individual logs to prevent Firestore queue exhaustion
+        onUpdateJob({ ...jobsToUpdate[i], status: bulkStatus }, true);
+        await new Promise(r => setTimeout(r, 60)); 
+      }
+      
+      // Send a single combined log and notification
+      if (onAddLog) {
+        onAddLog('UPDATE', `แก้ไขสถานะงานทีละหลายรายการ (${jobsToUpdate.length} รายการ) เป็นสถานะ: ${bulkStatus}`);
+      }
+      if (onNotifyEvent) {
+        onNotifyEvent(`ผู้ใช้งานได้อัปเดตสถานะงานพร้อมกัน ${jobsToUpdate.length} รายการ เป็นสถานะ: ${bulkStatus}`);
+      }
+    } finally {
+      setSelectedJobIds([]);
+      setIsUpdatingBulk(false);
+    }
+  };
 
   const handleExportExcel = () => {
     const exportData = jobs.map(job => ({
@@ -141,6 +189,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
       case 'Stopped': return 'text-slate-500 bg-slate-100 border-slate-200';
       case 'Paused': return 'text-amber-600 bg-amber-50 border-amber-200';
       case 'Rescheduled': return 'text-purple-600 bg-purple-50 border-purple-200';
+      case 'Cancelled': return 'text-slate-500 bg-slate-100 border-slate-300 line-through';
       default: return 'text-slate-500 bg-white border-slate-200';
     }
   };
@@ -156,6 +205,7 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
       case 'Rescheduled': return 'เลื่อนแผน';
       case 'No Plan': return 'รอดำเนินการ';
       case 'Planned': return 'รอดำเนินการ';
+      case 'Cancelled': return 'ยกเลิกแผน';
       default: return status;
     }
   };
@@ -348,6 +398,13 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                     {/* Machine Header */}
                     <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
                         <div className="flex items-center gap-3">
+                            <input 
+                              type="checkbox" 
+                              className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                              checked={machineJobs.length > 0 && machineJobs.every(job => selectedJobIds.includes(job.id))}
+                              onChange={() => toggleSelectMachineJobs(machineJobs)}
+                              disabled={machineJobs.length === 0}
+                            />
                             <div className={`px-3 py-1 rounded-lg text-sm font-bold shadow-sm tracking-wide ${machineJobs.length > 0 ? 'bg-slate-800 text-white' : 'bg-slate-300 text-slate-600'}`}>
                                 {machineId}
                             </div>
@@ -423,7 +480,15 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
                                         {!hasConflict && <div className={`absolute left-0 top-0 bottom-0 w-1 ${isUrgent ? 'bg-red-600' : isInserted ? 'bg-blue-500' : isDelayed ? 'bg-red-400' : job.status === 'Running' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>}
 
                                         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
-                                            <div className="flex-1 min-w-[200px]">
+                                            <div className="flex items-center pt-1 md:pt-0">
+                                                <input 
+                                                  type="checkbox" 
+                                                  className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer"
+                                                  checked={selectedJobIds.includes(job.id)}
+                                                  onChange={() => toggleJobSelection(job.id)}
+                                                />
+                                            </div>
+                                            <div className="flex-1 min-w-[180px]">
                                                 <div className="flex flex-wrap items-center gap-2 mb-1">
                                                     <h4 className={`font-bold text-lg ${isDelayed || isUrgent ? 'text-red-700' : 'text-slate-800'}`}>
                                                         {job.productItem}
@@ -620,6 +685,49 @@ export const ProductionPlan: React.FC<ProductionPlanProps> = ({ jobs, inventory,
           onClose={() => setMovingJob(null)}
           onUpdateJob={onUpdateJob}
         />
+      )}
+
+      {selectedJobIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-xl shadow-slate-300/30 border border-slate-300 p-2 px-4 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2 pr-4 border-r border-slate-200">
+            <span className="bg-brand-600 text-white px-2 py-0.5 rounded-full text-xs font-bold">
+              {selectedJobIds.length}
+            </span>
+            <span className="text-sm font-semibold text-slate-700 tracking-tight">รายการสั่งผลิต</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium">เปลี่ยนสถานะ:</span>
+            <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value as Status)}
+                className="text-sm border border-slate-300 rounded-lg p-1.5 focus:ring focus:ring-brand-200 outline-none w-36 font-semibold"
+            >
+                <option value="Planned">รอดำเนินการ</option>
+                <option value="Running">กำลังผลิต</option>
+                <option value="Delayed">ช้ากว่าแผน</option>
+                <option value="Paused">พัก / แทรก</option>
+                <option value="Stopped">หยุดเครื่อง</option>
+                <option value="Maintenance">ซ่อมบำรุง</option>
+                <option value="Rescheduled">เลื่อนแผน</option>
+                <option value="Completed">เสร็จสิ้น</option>
+                <option value="Cancelled">ยกเลิกแผน</option>
+            </select>
+            <button
+                onClick={handleBulkUpdateStatus}
+                disabled={isUpdatingBulk}
+                className="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm ml-1"
+            >
+                {isUpdatingBulk ? 'กำลังอัปเดต...' : 'อัปเดตสถานะ'}
+            </button>
+            <button
+                onClick={clearSelection}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors ml-2"
+                title="ยกเลิกการเลือก"
+            >
+                <X size={18} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

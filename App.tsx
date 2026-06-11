@@ -45,10 +45,11 @@ import { ProductionJob, MOCK_INVENTORY, MOCK_BOMS, PRODUCT_SPECS, MACHINE_MOLD_C
 import { Menu, Sparkles, Bell, Plus, BarChart3, Calendar, Clock, FileText, Cpu, Package, Settings, History, X, LogOut, Users, BrainCircuit, CheckCircle2, AlertOctagon, TrendingUp, Activity, ClipboardList } from 'lucide-react';
 
 import { AiKnowledgeBase } from './components/AiKnowledgeBase';
+import { AiAnalyticsReport } from './components/AiAnalyticsReport';
 import { DocumentCenter } from './components/DocumentCenter';
 import { formatDateTime, formatTimeOnly, getDateRangeForPeriod } from './utils/dateUtils';
 
-export type ViewState = 'dashboard' | 'plan' | 'completed-plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'inventory-dashboard' | 'master-data' | 'excel-sync' | 'ai-knowledge' | 'documents' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users' | 'downtime-logs' | 'daily-downtime' | 'daily-report' | 'meeting-planner';
+export type ViewState = 'dashboard' | 'plan' | 'completed-plan' | 'analysis' | 'schedule' | 'list' | 'machines' | 'inventory' | 'inventory-dashboard' | 'master-data' | 'excel-sync' | 'ai-knowledge' | 'documents' | 'history' | 'order-detail' | 'handover' | 'tag-print' | 'custom-form' | 'form-templates' | 'plan-print' | 'plan-vs-actual' | 'users' | 'downtime-logs' | 'daily-downtime' | 'daily-report' | 'meeting-planner' | 'ai-analytics';
 
 const App: React.FC = () => {
   const location = useLocation();
@@ -105,6 +106,7 @@ const App: React.FC = () => {
         { id: 'documents', label: 'ศูนย์เอกสาร', icon: <FileText size={20} /> },
         { id: 'form-templates', label: 'แบบฟอร์มเอกสาร', icon: <FileText size={20} /> },
         { id: 'daily-report', label: 'รายงานประจำวัน (AI)', icon: <FileText size={20} /> },
+        { id: 'ai-analytics', label: 'วิเคราะห์เชิงลึก (AI Data)', icon: <BrainCircuit size={20} /> },
         { id: 'delayed-jobs-report', label: 'สรุปงานล่าช้า', icon: <AlertOctagon size={20} /> },
         { id: 'meeting-planner', label: 'แผนการประชุม (CAR/PAR)', icon: <Users size={20} /> },
       ]
@@ -326,6 +328,12 @@ const App: React.FC = () => {
   ]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const savedCountRef = useRef(1); // Start at 1 because of the initial message
+  const isSavingMessagesRef = useRef(false);
+  const latestMessagesRef = useRef<AiMessage[]>(aiMessages);
+
+  useEffect(() => {
+    latestMessagesRef.current = aiMessages;
+  }, [aiMessages]);
   const assistantRef = useRef<SmartAssistantHandle>(null);
 
   // Filtered Data based on selectedPeriod
@@ -462,31 +470,45 @@ const App: React.FC = () => {
     if (!historyLoaded) return;
 
     const saveNewMessages = async () => {
-      if (aiMessages.length > savedCountRef.current) {
-        const newMessages = aiMessages.slice(savedCountRef.current);
-        const updatedMessages = [...aiMessages];
+      if (isSavingMessagesRef.current) return;
+      isSavingMessagesRef.current = true;
+
+      try {
         let hasUpdates = false;
-        
-        for (let i = 0; i < newMessages.length; i++) {
-          const msg = newMessages[i];
-          const globalIndex = savedCountRef.current + i;
-          try {
-            // Sanitize message to remove undefined values deeply
-            const sanitizedMsg = JSON.parse(JSON.stringify(msg));
-            delete sanitizedMsg.id;
-            
-            const docRef = await addDoc(collection(db, 'chat_history'), sanitizedMsg);
-            updatedMessages[globalIndex] = { ...msg, id: docRef.id };
-            hasUpdates = true;
-          } catch (error) {
-            console.error("Error saving chat message:", error);
+        let updatedMessages = [...latestMessagesRef.current];
+
+        while (latestMessagesRef.current.length > savedCountRef.current) {
+          const currentLength = latestMessagesRef.current.length;
+          const newMessages = latestMessagesRef.current.slice(savedCountRef.current, currentLength);
+          
+          updatedMessages = [...latestMessagesRef.current];
+
+          for (let i = 0; i < newMessages.length; i++) {
+            const msg = newMessages[i];
+            const globalIndex = savedCountRef.current + i;
+            try {
+              if (!msg) continue;
+              
+              // Sanitize message to remove undefined values deeply
+              const sanitizedMsg = JSON.parse(JSON.stringify(msg));
+              delete sanitizedMsg.id;
+              
+              const docRef = await addDoc(collection(db, 'chat_history'), sanitizedMsg);
+              updatedMessages[globalIndex] = { ...msg, id: docRef.id };
+              hasUpdates = true;
+            } catch (error) {
+              console.error("Error saving chat message:", error);
+            }
           }
+          
+          savedCountRef.current = currentLength;
         }
-        
-        savedCountRef.current = aiMessages.length;
+
         if (hasUpdates) {
           setAiMessages(updatedMessages);
         }
+      } finally {
+        isSavingMessagesRef.current = false;
       }
     };
 
@@ -652,17 +674,19 @@ const App: React.FC = () => {
     navigate('/tag-print');
   };
 
-  const handleSaveJob = async (updatedJob: ProductionJob) => {
+  const handleSaveJob = async (updatedJob: ProductionJob, bypassLog?: boolean) => {
     try {
       const sanitizedJob = JSON.parse(JSON.stringify(updatedJob));
       await setDoc(doc(db, 'jobs', sanitizedJob.id), sanitizedJob);
       const newJobs = jobs.map(j => j.id === sanitizedJob.id ? sanitizedJob : j);
       if (!jobs.find(j => j.id === sanitizedJob.id)) newJobs.push(sanitizedJob);
-      addLog('UPDATE', `แก้ไขงาน ${sanitizedJob.jobOrder} (${sanitizedJob.productItem}) - สถานะ: ${sanitizedJob.status}`, sanitizedJob.id, newJobs);
       
-      // Notify assistant
-      if (assistantRef.current) {
-        assistantRef.current.notifyEvent(`ผู้ใช้งานได้อัปเดตข้อมูลรายการผลิต ${sanitizedJob.jobOrder} สำหรับเครื่อง ${sanitizedJob.machineId}`);
+      if (!bypassLog) {
+        addLog('UPDATE', `แก้ไขงาน ${sanitizedJob.jobOrder} (${sanitizedJob.productItem}) - สถานะ: ${sanitizedJob.status}`, sanitizedJob.id, newJobs);
+        // Notify assistant
+        if (assistantRef.current) {
+          assistantRef.current.notifyEvent(`ผู้ใช้งานได้อัปเดตข้อมูลรายการผลิต ${sanitizedJob.jobOrder} สำหรับเครื่อง ${sanitizedJob.machineId}`);
+        }
       }
     } catch (error) {
       console.error("Error saving job to Firebase:", error);
@@ -1580,6 +1604,7 @@ const App: React.FC = () => {
                      currentView === 'history' ? 'ประวัติการทำงาน (History Log)' :
                      currentView === 'daily-downtime' ? 'รายงานสรุปเครื่องจอดรายวัน (Daily Downtime)' :
                      currentView === 'daily-report' ? 'รายงานประจำวัน (AI Daily Report)' :
+                     currentView === 'ai-analytics' ? 'วิเคราะห์เชิงลึกด้วย AI (Advanced AI Analytics)' :
                      currentView === 'tag-print' ? 'พิมพ์สติกเกอร์ (Print Tags)' :
                      currentView === 'custom-form' ? customForm?.title || 'เอกสาร' :
                      currentView === 'form-templates' ? 'แบบฟอร์มเอกสาร (Form Templates)' :
@@ -1659,7 +1684,7 @@ const App: React.FC = () => {
               </div>
             </div>
           } />
-          <Route path="/plan" element={<ProductionPlan jobs={filteredJobs.filter(j => j.status !== 'Completed')} inventory={inventory} boms={boms} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} onUpdateJob={handleSaveJob} />} />
+          <Route path="/plan" element={<ProductionPlan jobs={filteredJobs.filter(j => j.status !== 'Completed')} inventory={inventory} boms={boms} onEditJob={handleEditJob} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onImportJobs={handleImportJobs} onPrintPlan={() => navigate('/plan-print')} onOpenImportModal={() => setIsImportPlanModalOpen(true)} onUpdateJob={handleSaveJob} onAddLog={addLog} onNotifyEvent={(text) => assistantRef.current?.notifyEvent(text)} />} />
           <Route path="/smart-calculator" element={<SmartCalculatorView />} />
           <Route path="/completed-plan" element={<CompletedProductionView jobs={filteredJobs} onViewOrder={handleViewOrder} onPrintTag={handlePrintTag} onPrintHandover={handlePrintHandover} onRevertJob={handleRevertJob} />} />
           <Route path="/plan-vs-actual" element={<PlanVsActualDashboard jobs={filteredJobs} onUpdateActuals={handleUpdateActuals} />} />
@@ -1701,6 +1726,7 @@ const App: React.FC = () => {
           <Route path="/meeting-planner" element={<MeetingPlannerView jobs={filteredJobs} downtimeLogs={filteredDowntimeLogs} dailyReports={filteredDailyReports} />} />
           <Route path="/delayed-jobs-report" element={<DelayedJobsReport jobs={filteredJobs} />} />
           <Route path="/daily-report" element={<DailyReportGenerator jobs={filteredJobs} dailyReports={filteredDailyReports} onSaveReport={handleSaveDailyReport} onDeleteReport={handleDeleteDailyReport} />} />
+          <Route path="/ai-analytics" element={<AiAnalyticsReport jobs={filteredJobs} dailyReports={filteredDailyReports} shiftLogs={filteredShiftLogs} downtimeLogs={filteredDowntimeLogs} currentUser={currentUser} />} />
           <Route path="/shift-production" element={<ShiftProductionView logs={filteredShiftLogs} jobs={filteredJobs} onSaveLog={handleSaveShiftProductionLog} />} />
           <Route path="/form-templates" element={
             <FormTemplatesView 

@@ -342,7 +342,8 @@ export const EditJobModal: React.FC<EditJobModalProps> = ({ isOpen, onClose, job
                     { value: 'Rescheduled', label: '📅 เลื่อนแผน (Rescheduled)' },
                     { value: 'Maintenance', label: '🔧 ซ่อมบำรุง' },
                     { value: 'Completed', label: '✅ เสร็จสิ้น' },
-                    { value: 'No Plan', label: '⏳ รอดำเนินการ' }
+                    { value: 'No Plan', label: '⏳ รอดำเนินการ' },
+                    { value: 'Cancelled', label: '❌ ยกเลิกแผน (Cancelled)' }
                   ]}
                   className={`w-full font-bold ${
                     formData.status === 'Running' ? 'text-emerald-700' :

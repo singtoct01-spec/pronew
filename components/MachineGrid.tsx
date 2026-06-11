@@ -42,6 +42,7 @@ export const MachineGrid: React.FC<MachineGridProps> = ({ jobs, onEditJob }) => 
       case 'Delayed': return 'border-red-500 bg-red-50';
       case 'Stopped': return 'border-slate-400 bg-slate-100';
       case 'Maintenance': return 'border-orange-500 bg-orange-50';
+      case 'Cancelled': return 'border-slate-300 bg-slate-50 line-through';
       default: return 'border-slate-200 bg-white';
     }
   };
@@ -52,6 +53,7 @@ export const MachineGrid: React.FC<MachineGridProps> = ({ jobs, onEditJob }) => 
       case 'Delayed': return 'ล่าช้า/ตกแผน';
       case 'Stopped': return 'หยุด';
       case 'Maintenance': return 'ซ่อมบำรุง';
+      case 'Cancelled': return 'ยกเลิก';
       default: return 'ว่าง (Idle)';
     }
   };
@@ -62,6 +64,7 @@ export const MachineGrid: React.FC<MachineGridProps> = ({ jobs, onEditJob }) => 
       case 'Delayed': return <AlertTriangle size={16} className="text-red-600" />;
       case 'Stopped': return <Pause size={16} className="text-slate-600" />;
       case 'Maintenance': return <AlertOctagon size={16} className="text-orange-600" />;
+      case 'Cancelled': return <AlertOctagon size={16} className="text-slate-400" />;
       default: return <Cpu size={16} className="text-slate-400" />;
     }
   };
